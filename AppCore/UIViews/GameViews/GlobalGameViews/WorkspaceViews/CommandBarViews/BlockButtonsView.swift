@@ -8,28 +8,30 @@
 import SwiftUI
 
 struct BlockButtonsView: View {
-    let onBlockAppended: (Block) -> Void
+    let onBlockTapped: (Block) -> Void
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(blocksArray) { block in
                     Button {
-                        onBlockAppended(block)
+                        onBlockTapped(block)
                     } label: {
                         Label(block.title, systemImage: block.icon)
-                            .font(.caption)
+                            .font(.callout)
                             .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.3))
-                            .cornerRadius(6)
+                            .padding(.vertical, 5)
+                            .background(Color.blue.opacity(0.15))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.blue.opacity(0.2), lineWidth: 0.5)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 4)
         }
-        .scrollDisabled(true)
     }
 }

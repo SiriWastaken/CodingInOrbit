@@ -11,10 +11,10 @@ struct LineNumberView: View {
     let count: Int
     
     var body: some View {
-        VStack(alignment: .trailing, spacing: 0) {
+        VStack(alignment: .trailing, spacing: 12) {
             ForEach(0..<count, id: \.self) { index in
                 Text("\(index + 1)")
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .foregroundColor(.gray)
                     .frame(height: 20)
             }

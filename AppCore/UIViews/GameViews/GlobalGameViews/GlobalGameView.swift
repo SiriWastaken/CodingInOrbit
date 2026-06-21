@@ -59,7 +59,6 @@ struct GlobalGameView: View {
                         )
                 }
                 
-                // MARK: - Rocket (Positioned on Grid)
                 let cellSize = min(geometry.size.width, geometry.size.height) / CGFloat(gridSizeW)
                 let xOffset = CGFloat(rocket.col) * cellSize + cellSize / 2
                 let yOffset = CGFloat(rocket.row) * cellSize + cellSize / 2
@@ -79,13 +78,15 @@ struct GlobalGameView: View {
                 
                 gridView
                     .frame(width: geometry.size.width * 0.5)
+                    .ignoresSafeArea(.keyboard)
             }
+            
+
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
-                    // Back action — will be handled by NavigationStack
                 } label: {
                     HStack {
                         Image(systemName: "chevron.left")
@@ -96,6 +97,7 @@ struct GlobalGameView: View {
             }
         }
     }
+
 }
 
 #Preview {
