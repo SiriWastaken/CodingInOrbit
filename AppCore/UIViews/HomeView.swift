@@ -62,7 +62,7 @@ struct HomeView: View {
                         .foregroundColor(.white.opacity(0.5))
                         .padding(.bottom, 20)
                     
-                    NavigationLink(destination: GameView()
+                    NavigationLink(destination: InitGameView()
                         .environmentObject(accessibilityManager)
                     ) {
                         Text("LIFTOFF")

@@ -1,5 +1,5 @@
 //
-//  Sidebar.swift
+//  CarouselView.swift
 //  Coding In Orbit
 //
 //  Created by Sri Ganty on 2026-06-18.
@@ -11,221 +11,181 @@ struct Lesson: Identifiable, Hashable {
     let id = UUID()
     let title: String
     let icon: String
+    let description: String
 }
 
 let lessons: [Lesson] = [
-    Lesson(title: "Liftoff", icon: "paperplane.fill"),
-    Lesson(title: "Low Earth Orbit", icon: "globe.americas.fill"),
-    Lesson(title: "Travel To The Moon", icon: "moon.stars.fill")
+    Lesson(
+        title: "Tutorial",
+        icon: "graduationcap.fill",
+        description: "Learn to code by guiding a rocket through space."
+    )
 ]
 
-struct SidebarView: View {
-    @State private var selectedLesson: Lesson? = lessons.first
+struct CarouselView: View {
+    @State private var selectedIndex = 0
+    @State private var isLaunching = false
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } content: {
-            contentView
-        } detail: {
-            EmptyView()
-        }
-        .navigationSplitViewColumnWidth(
-            min: 280,
-            ideal: 320,
-            max: 360
-        )
-        .preferredColorScheme(.dark)
-    }
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.02, green: 0.03, blue: 0.08),
+                        Color(red: 0.04, green: 0.06, blue: 0.15),
+                        Color(red: 0.02, green: 0.03, blue: 0.08)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                .overlay(
+                    RadialGradient(
+                        colors: [
+                            Color.blue.opacity(0.08),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 100,
+                        endRadius: 500
+                    )
+                )
 
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CODING IN")
+                            .font(.system(size: 18, weight: .light, design: .serif))
+                            .tracking(4)
+                            .foregroundStyle(.white.opacity(0.6))
 
-    private var sidebar: some View {
-        ZStack {
-            spaceBackground
+                        Text("ORBIT")
+                            .font(.system(size: 36, weight: .bold, design: .serif))
+                            .tracking(6)
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 40)
+                    .padding(.bottom, 8)
 
-            VStack(spacing: 0) {
+                    Text("MISSIONS")
+                        .font(.system(size: 11, weight: .light))
+                        .tracking(3)
+                        .foregroundStyle(.white.opacity(0.35))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 40)
+                        .padding(.bottom, 24)
 
-                VStack(spacing: 2) {
-                    Text("CODING IN")
-                        .font(.system(size: 16, weight: .light, design: .serif))
-                        .tracking(4)
-                        .foregroundStyle(.white.opacity(0.7))
-
-                    Text("ORBIT")
-                        .font(.system(size: 28, weight: .bold, design: .serif))
-                        .tracking(6)
-                        .foregroundStyle(.white)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 18)
-                .padding(.horizontal)
-
-
-                List {
-                    Section("MISSIONS") {
-                        ForEach(lessons) { lesson in
-                            LessonRow(
-                                lesson: lesson,
-                                isSelected: selectedLesson == lesson
-                            )
-                            .tag(lesson)
-                            .onTapGesture {
-                                selectedLesson = lesson
-                            }
-                            .listRowInsets(
-                                EdgeInsets(
-                                    top: 6,
-                                    leading: 12,
-                                    bottom: 6,
-                                    trailing: 12
-                                )
-                            )
-                            .listRowBackground(Color.clear)
+                    TabView(selection: $selectedIndex) {
+                        ForEach(0..<lessons.count, id: \.self) { index in
+                            MissionCard(lesson: lessons[index])
+                                .tag(index)
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 8)
                         }
                     }
-                }
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: 360)
+                    .padding(.bottom, 12)
 
-                Spacer(minLength: 0)
-            }
-        }
-    }
+                    HStack(spacing: 10) {
+                        ForEach(0..<lessons.count, id: \.self) { index in
+                            Circle()
+                                .fill(index == selectedIndex ? Color.blue : Color.white.opacity(0.2))
+                                .frame(width: 8, height: 8)
+                                .animation(.easeInOut(duration: 0.2), value: selectedIndex)
+                        }
+                    }
+                    .padding(.bottom, 24)
 
-
-    private var contentView: some View {
-        ZStack {
-            spaceBackground
-
-            if let lesson = selectedLesson {
-                VStack(spacing: 22) {
-                    Image(systemName: lesson.icon)
-                        .font(.system(size: 78))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [
-                                    Color.white,
-                                    Color.blue.opacity(0.8)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    Button {
+                        isLaunching = true
+                    } label: {
+                        Text("LAUNCH MISSION")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .tracking(2)
+                            .foregroundStyle(.white)
+                            .frame(width: 260, height: 56)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.blue, Color(red: 0.3, green: 0.2, blue: 0.8)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
+                            .clipShape(Capsule())
+                            .shadow(color: .blue.opacity(0.3), radius: 16, x: 0, y: 6)
+                    }
+                    .padding(.bottom, 40)
 
-                    Text(lesson.title)
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
-
-                    Text("Begin your mission.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 46))
-                        .foregroundStyle(.white.opacity(0.8))
-
-                    Text("Select a Lesson")
-                        .font(.title.bold())
-                        .foregroundStyle(.white)
-
-                    Text("Choose a mission from the sidebar.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.6))
+                    Spacer()
                 }
             }
+            .navigationDestination(isPresented: $isLaunching) {
+                GlobalGameView()
+                    .navigationBarHidden(true)
+            }
         }
-    }
-
-
-    private var spaceBackground: some View {
-        LinearGradient(
-            colors: [
-                Color.black,
-                Color(red: 0.03, green: 0.05, blue: 0.12),
-                Color.black
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .overlay(
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.55),
-                    .clear,
-                    Color.black.opacity(0.35)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
     }
 }
 
-
-struct LessonRow: View {
+struct MissionCard: View {
     let lesson: Lesson
-    let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.2), Color.black.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.blue.opacity(0.15), lineWidth: 1)
+                    )
 
-            Image(systemName: lesson.icon)
-                .foregroundStyle(isSelected ? Color.blue.opacity(0.9) : .white.opacity(0.8))
+                Image(systemName: lesson.icon)
+                    .font(.system(size: 44))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, .blue.opacity(0.6)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
 
             Text(lesson.title)
+                .font(.largeTitle.bold())
+                .foregroundStyle(.white)
+
+            Text(lesson.description)
                 .font(.headline)
-                .foregroundStyle(.white.opacity(isSelected ? 1.0 : 0.85))
-
-            Spacer()
-
-            if isSelected {
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(Color.blue.opacity(0.8))
-            }
+                .foregroundStyle(.white.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(
-                    isSelected
-                    ? LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.85),
-                            Color.blue.opacity(0.25)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    : LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.04),
-                            Color.white.opacity(0.02)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
                 )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    isSelected
-                    ? Color.blue.opacity(0.35)
-                    : Color.white.opacity(0.08),
-                    lineWidth: 1
-                )
-        }
-        .shadow(
-            color: isSelected ? Color.blue.opacity(0.25) : .clear,
-            radius: 12,
-            x: 0,
-            y: 6
         )
     }
 }
 
+#Preview {
+    CarouselView()
+}

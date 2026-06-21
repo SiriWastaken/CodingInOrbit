@@ -8,13 +8,13 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "Coding In Orbit",
+    name: "CodingInOrbit",
     platforms: [
         .iOS("16.0")
     ],
     products: [
         .iOSApplication(
-            name: "Coding In Orbit",
+            name: "CodingInOrbit",
             targets: ["AppModule"],
             bundleIdentifier: "com.sriganty.ssc.Grandmaster-s-Fleet",
             teamIdentifier: "F7LL3A37L6",
