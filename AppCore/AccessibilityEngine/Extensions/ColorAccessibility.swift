@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 extension Color {
     static func adaptiveText(_ manager: AccessibilityManager) -> Color {
         if manager.isHighContrast {

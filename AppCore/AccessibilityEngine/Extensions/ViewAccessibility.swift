@@ -32,10 +32,6 @@ extension View {
     }
     
     func applyDyslexicFont(_ manager: AccessibilityManager) -> some View {
-        self.font(
-            manager.isDyslexicFont
-                ? Font.custom("OpenDyslexic", size: 18 * manager.textSizeMultiplier)
-                : Font.body
-        )
+        self.font(Font.appBody(manager))
     }
 }

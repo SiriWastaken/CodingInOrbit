@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 
+@MainActor
 class AccessibilityManager: ObservableObject {
     @AppStorage("isDyslexicFont") var isDyslexicFont = false
     @AppStorage("isHighContrast") var isHighContrast = false
@@ -17,6 +18,8 @@ class AccessibilityManager: ObservableObject {
     @AppStorage("isInvertColors") var isInvertColors = false
     @AppStorage("isSpeechEnabled") var isSpeechEnabled = true
     @AppStorage("isHapticsEnabled") var isHapticsEnabled = true
+    @AppStorage("isSoundEnabled") var isSoundEnabled = true
+    @AppStorage("speechVoice") var speechVoice = "Default"
     @AppStorage("textSizeMultiplier") var textSizeMultiplier: Double = 1.0
     
     @Published var isVoiceOverRunning = false
@@ -33,7 +36,10 @@ class AccessibilityManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.isVoiceOverRunning = UIAccessibility.isVoiceOverRunning
+            // The observer is registered on the main queue, so this always runs on the main actor.
+            MainActor.assumeIsolated {
+                self?.isVoiceOverRunning = UIAccessibility.isVoiceOverRunning
+            }
         }
         
         isVoiceOverRunning = UIAccessibility.isVoiceOverRunning
@@ -57,6 +63,8 @@ class AccessibilityManager: ObservableObject {
         isInvertColors = false
         isSpeechEnabled = true
         isHapticsEnabled = true
+        isSoundEnabled = true
+        speechVoice = "Default"
         textSizeMultiplier = 1.0
     }
     

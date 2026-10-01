@@ -1,5 +1,5 @@
 //
-//  SwiftUIView.swift
+//  OptionsView.swift
 //  Coding In Orbit
 //
 //  Created by Sri Ganty on 2026-06-16.
@@ -7,16 +7,10 @@
 
 import SwiftUI
 
-// This screen is the orchestator of the AccessibilityEngine. It's user accessible and...
-// it brings together all of AccessibilityManager's functions, as well as options from...
-// Accessibility Extensions like ColorAccessibility and ViewAccessibility.
-// The technology that makes all of this possible is Apple's Accessibility API. 
-
 struct OptionsView: View {
     @EnvironmentObject var accessibilityManager: AccessibilityManager
     @State private var isSplashVisible = true
     @State private var isContentVisible = false
-    @State private var selectedSpeechVoice = "Default"
     @Environment(\.dismiss) var dismiss
     
     let speechVoices = ["Default", "British", "Australian"]
@@ -38,11 +32,23 @@ struct OptionsView: View {
             
             VStack(spacing: 16) {
                 HStack {
-                    Button{dismiss()} label:{Text("Back")}
+                    Button {
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "chevron.left")
+                            Text("Back")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    }
+                    
+                    Spacer()
                     
                     Text("OPTIONS")
                         .font(.largeTitle.bold())
                         .foregroundColor(.white)
+                    
                     Spacer()
                     
                     Button {
@@ -50,7 +56,7 @@ struct OptionsView: View {
                     } label: {
                         Label("Reset", systemImage: "arrow.counterclockwise")
                             .font(.headline)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.blue)
                     }
                 }
                 .padding(.horizontal)
@@ -86,13 +92,17 @@ struct OptionsView: View {
                             Toggle("Enable Haptics", isOn: $accessibilityManager.isHapticsEnabled)
                                 .toggleStyle(SpaceToggleStyle())
                             
-                            Picker("Speech Voice", selection: $selectedSpeechVoice) {
+                            Toggle("Enable Sound Effects", isOn: $accessibilityManager.isSoundEnabled)
+                                .toggleStyle(SpaceToggleStyle())
+                            
+                            Picker("Speech Voice", selection: $accessibilityManager.speechVoice) {
                                 ForEach(speechVoices, id: \.self) { voice in
                                     Text(voice).tag(voice)
                                 }
                             }
-                            .pickerStyle(SegmentedPickerStyle())
-                            .colorScheme(.dark)
+                            .pickerStyle(.menu)
+                            .tint(.white)
+                            .foregroundColor(.white)
                         }
                         
                         SectionView(title: "Motion") {
@@ -113,7 +123,7 @@ struct OptionsView: View {
                                     }
                                 }
                                 .font(.caption)
-                                .foregroundColor(.yellow)
+                                .foregroundColor(.blue)
                             }
                         }
                     }
@@ -147,7 +157,7 @@ struct SectionView<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.headline)
-                .foregroundColor(.yellow)
+                .foregroundColor(.white.opacity(0.8))
                 .padding(.leading, 4)
             
             VStack(spacing: 12) {
@@ -156,7 +166,7 @@ struct SectionView<Content: View>: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.white.opacity(0.06))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
                             .stroke(Color.white.opacity(0.08), lineWidth: 1)
@@ -173,7 +183,7 @@ struct SpaceToggleStyle: ToggleStyle {
                 .foregroundColor(.white)
             Spacer()
             RoundedRectangle(cornerRadius: 16)
-                .fill(configuration.isOn ? Color.yellow : Color.gray.opacity(0.3))
+                .fill(configuration.isOn ? Color.blue : Color.gray.opacity(0.3))
                 .frame(width: 50, height: 30)
                 .overlay(
                     Circle()
@@ -183,6 +193,8 @@ struct SpaceToggleStyle: ToggleStyle {
                         .animation(.spring(), value: configuration.isOn)
                 )
                 .onTapGesture {
+                    let impact = UIImpactFeedbackGenerator(style: .light)
+                    impact.impactOccurred()
                     withAnimation(.spring()) {
                         configuration.isOn.toggle()
                     }

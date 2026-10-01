@@ -8,16 +8,19 @@
 import SwiftUI
 
 struct CommandBarView: View {
-    @Binding var codeLines: [CodeLine]
+    let blocks: [Block]
+    let isRunning: Bool
+    let onInsert: (String) -> Void
     let onRun: () -> Void
-    
+    let onStop: () -> Void
+
     var body: some View {
         HStack(spacing: 12) {
-            BlockButtonsView { block in
-                appendBlock(block)
-            }
-            
-            RunButtonView(onRun: onRun)
+            BlockButtonsView(blocks: blocks, onInsert: onInsert)
+                .disabled(isRunning)
+                .opacity(isRunning ? 0.4 : 1)
+
+            RunButtonView(isRunning: isRunning, onRun: onRun, onStop: onStop)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -33,10 +36,5 @@ struct CommandBarView: View {
         .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
         .padding(.horizontal, 12)
         .padding(.bottom, 12)
-    }
-    
-    private func appendBlock(_ block: Block) {
-        let newLine = CodeLine(depth: 0, text: block.command + "()")
-        codeLines.append(newLine)
     }
 }
