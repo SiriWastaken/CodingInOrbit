@@ -12,8 +12,9 @@ import UIKit
 // - turn off autocorrect and auto-capitals (so "launch()" doesn't become "Launch()")
 // - color the code like Xcode does
 // - auto-indent, and close a { for you when you press return
-// - highlight the running line, the line with an error, and the line you tapped
+// - highlight the running line, the line with an error, the line you tapped, and the line you're on
 // - show line numbers that stay lined up as you scroll, with loop counts and sensor results
+// - feel alive: a glowing cursor, and a little sparkle whenever a block lands
 //
 // The text is the single source of truth: the editor only reports what was typed, and the
 // code is parsed when Run is pressed.
@@ -28,6 +29,7 @@ struct CodeEditorView: UIViewRepresentable {
     let bridge: EditorBridge
     let onEdit: () -> Void
     let onLineTapped: (Int) -> Void
+    let onFocusChange: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -42,8 +44,11 @@ struct CodeEditorView: UIViewRepresentable {
 
     func updateUIView(_ container: CodeEditorContainer, context: Context) {
         context.coordinator.parent = self
-        bridge.textView = container.textView
-        container.gutter.onLineTapped = onLineTapped
+        bridge.container = container
+        container.gutter.onLineTapped = { line in
+            Feedback.select()
+            onLineTapped(line)
+        }
 
         if container.textView.text != code {
             container.textView.text = code
@@ -64,14 +69,32 @@ struct CodeEditorView: UIViewRepresentable {
             self.parent = parent
         }
 
+        private func container(of view: UIView) -> CodeEditorContainer? {
+            view.superview as? CodeEditorContainer
+        }
+
         func textViewDidChange(_ textView: UITextView) {
             parent.code = textView.text
-            (textView.superview as? CodeEditorContainer)?.refresh()
+            container(of: textView)?.refresh()
             parent.onEdit()
         }
 
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            container(of: textView)?.cursorMoved()
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            container(of: textView)?.focusChanged(true)
+            parent.onFocusChange(true)
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            container(of: textView)?.focusChanged(false)
+            parent.onFocusChange(false)
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            (scrollView.superview as? CodeEditorContainer)?.gutter.setNeedsDisplay()
+            container(of: scrollView)?.scrolled()
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
@@ -124,10 +147,11 @@ struct CodeEditorView: UIViewRepresentable {
 /// Lets the block palette type into the editor at the cursor.
 @MainActor
 final class EditorBridge {
-    weak var textView: UITextView?
+    weak var container: CodeEditorContainer?
 
     func insert(_ snippet: String) {
-        guard let textView, textView.isEditable else { return }
+        guard let container, container.textView.isEditable else { return }
+        let textView = container.textView
         // Without a cursor (the keyboard isn't up), blocks go at the end.
         if !textView.isFirstResponder {
             textView.selectedRange = NSRange(location: (textView.text as NSString).length, length: 0)
@@ -156,6 +180,13 @@ final class EditorBridge {
         if marker.location != NSNotFound {
             textView.selectedRange = NSRange(location: insertAt + marker.location, length: 0)
         }
+
+        // Work out which lines are new, so they can sparkle.
+        let before = (textView.text as NSString).substring(to: insertAt)
+        var firstLine = before.filter { $0 == "\n" }.count + 1
+        if cleaned.hasPrefix("\n") { firstLine += 1 }
+        let lineCount = cleaned.trimmingCharacters(in: .newlines).split(separator: "\n", omittingEmptySubsequences: false).count
+        container.celebrateInsertion(lines: firstLine..<(firstLine + max(lineCount, 1)))
     }
 }
 
@@ -168,15 +199,22 @@ final class CodeEditorContainer: UIView {
     var notes: [Int: GutterNote] = [:]
 
     private let highlighter = SyntaxHighlighter()
+    private let placeholder = UILabel()
+    private let caretGlow = UIView()
+    private var isEditing = false
+
+    private var reduceMotion: Bool {
+        UIAccessibility.isReduceMotionEnabled || UserDefaults.standard.bool(forKey: "isReducedMotion")
+    }
 
     init() {
         super.init(frame: .zero)
-        backgroundColor = UIColor(white: 1, alpha: 0.04)
+        backgroundColor = Palette.dusk.withAlphaComponent(0.55)
 
         textView.backgroundColor = .clear
         textView.font = SyntaxHighlighter.font
-        textView.textColor = .white
-        textView.tintColor = SceneArt.trailColor
+        textView.textColor = Palette.starlight
+        textView.tintColor = Palette.goldTrim
         textView.adjustsFontForContentSizeCategory = true
         textView.autocorrectionType = .no
         textView.autocapitalizationType = .none
@@ -188,13 +226,34 @@ final class CodeEditorContainer: UIView {
         textView.keyboardAppearance = .dark
         textView.keyboardDismissMode = .interactive
         textView.alwaysBounceVertical = true
-        textView.textContainerInset = UIEdgeInsets(top: 12, left: 4, bottom: 12, right: 8)
+        textView.textContainerInset = UIEdgeInsets(top: Space.m, left: Space.xs, bottom: Space.m, right: Space.s)
         textView.accessibilityLabel = "Code editor"
         textView.accessibilityHint = "Write commands for the rocket, one per line."
+
+        placeholder.text = GuideVoice.editorPlaceholder
+        placeholder.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
+        placeholder.adjustsFontForContentSizeCategory = true
+        placeholder.textColor = Palette.starlight.withAlphaComponent(0.35)
+        placeholder.numberOfLines = 0
+        placeholder.isAccessibilityElement = false
+
+        // A soft gold glow that follows the cursor and breathes while you type.
+        let glowLayer = CAGradientLayer()
+        glowLayer.type = .radial
+        glowLayer.colors = [Palette.goldTrim.withAlphaComponent(0.55).cgColor, Palette.goldTrim.withAlphaComponent(0).cgColor]
+        glowLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
+        glowLayer.endPoint = CGPoint(x: 1, y: 1)
+        glowLayer.frame = CGRect(x: 0, y: 0, width: Space.xl, height: Space.xl)
+        caretGlow.layer.addSublayer(glowLayer)
+        caretGlow.frame = glowLayer.frame
+        caretGlow.isUserInteractionEnabled = false
+        caretGlow.alpha = 0
 
         gutter.textView = textView
         addSubview(gutter)
         addSubview(textView)
+        addSubview(placeholder)
+        addSubview(caretGlow)
 
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (container: CodeEditorContainer, _) in
             container.textView.font = SyntaxHighlighter.font
@@ -212,15 +271,131 @@ final class CodeEditorContainer: UIView {
         let gutterWidth = UIFontMetrics(forTextStyle: .body).scaledValue(for: 44)
         gutter.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
         textView.frame = CGRect(x: gutterWidth, y: 0, width: bounds.width - gutterWidth, height: bounds.height)
+        let inset = textView.textContainerInset
+        let placeholderWidth = textView.bounds.width - inset.left - inset.right - Space.s
+        let placeholderSize = placeholder.sizeThatFits(CGSize(width: placeholderWidth, height: .greatestFiniteMagnitude))
+        placeholder.frame = CGRect(x: gutterWidth + inset.left + Space.xs, y: inset.top, width: placeholderWidth, height: placeholderSize.height)
         gutter.setNeedsDisplay()
+        cursorMoved()
     }
 
     func refresh() {
-        highlighter.apply(to: textView, activeLine: activeLine, errorLine: errorLine, selectedLine: selectedLine)
+        let cursorLine = isEditing ? currentLine() : nil
+        highlighter.apply(to: textView, activeLine: activeLine, errorLine: errorLine, selectedLine: selectedLine, cursorLine: cursorLine)
+        placeholder.isHidden = !textView.text.isEmpty
         gutter.activeLine = activeLine
         gutter.errorLine = errorLine
         gutter.notes = notes
         gutter.setNeedsDisplay()
+    }
+
+    // MARK: Focus and cursor
+
+    func focusChanged(_ focused: Bool) {
+        isEditing = focused
+        refresh()
+        UIView.animate(withDuration: 0.25) { self.caretGlow.alpha = focused ? 1 : 0 }
+        if focused && !reduceMotion {
+            let breathe = CABasicAnimation(keyPath: "opacity")
+            breathe.fromValue = 1
+            breathe.toValue = 0.35
+            breathe.duration = 1.1
+            breathe.autoreverses = true
+            breathe.repeatCount = .infinity
+            breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            caretGlow.layer.add(breathe, forKey: "breathe")
+        } else {
+            caretGlow.layer.removeAnimation(forKey: "breathe")
+        }
+    }
+
+    func cursorMoved() {
+        if isEditing { refresh() }
+        guard let range = textView.selectedTextRange else { return }
+        let caret = textView.caretRect(for: range.end)
+        let point = textView.convert(CGPoint(x: caret.midX, y: caret.midY), to: self)
+        caretGlow.center = point
+    }
+
+    func scrolled() {
+        gutter.setNeedsDisplay()
+        cursorMoved()
+    }
+
+    private func currentLine() -> Int {
+        let location = min(textView.selectedRange.location, (textView.text as NSString).length)
+        return (textView.text as NSString).substring(to: location).filter { $0 == "\n" }.count + 1
+    }
+
+    // MARK: Delight
+
+    /// When a block lands: the new lines glow and wiggle, and a few sparkles pop out at the cursor.
+    func celebrateInsertion(lines: Range<Int>) {
+        layoutIfNeeded()
+        for line in lines {
+            guard let rect = rect(forLine: line) else { continue }
+            let bar = UIView(frame: CGRect(x: gutter.frame.maxX + Space.xs, y: rect.minY - 1, width: textView.bounds.width - Space.s, height: rect.height + 2))
+            bar.backgroundColor = Palette.goldTrim.withAlphaComponent(0.22)
+            bar.layer.cornerRadius = Radius.small / 2
+            bar.isUserInteractionEnabled = false
+            insertSubview(bar, belowSubview: placeholder)
+            if !reduceMotion {
+                let wiggle = CAKeyframeAnimation(keyPath: "transform.translation.x")
+                wiggle.values = [0, -5, 4, -2, 1, 0]
+                wiggle.duration = 0.4
+                bar.layer.add(wiggle, forKey: "wiggle")
+            }
+            UIView.animate(withDuration: 0.7, delay: 0.35, options: [.curveEaseOut]) {
+                bar.alpha = 0
+            } completion: { _ in
+                bar.removeFromSuperview()
+            }
+        }
+        guard !reduceMotion else { return }
+        sparkle(at: caretGlow.center)
+    }
+
+    private func rect(forLine line: Int) -> CGRect? {
+        guard let range = SyntaxHighlighter.range(ofLine: line, in: textView.text as NSString),
+              let start = textView.position(from: textView.beginningOfDocument, offset: range.location) else { return nil }
+        return textView.convert(textView.caretRect(for: start), to: self)
+    }
+
+    private static let sparkleImage: CGImage? = {
+        let size = CGSize(width: 24, height: 24)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            UIColor.white.setFill()
+            UIBezierPath(cgPath: SparkleShape().path(in: CGRect(origin: .zero, size: size)).cgPath).fill()
+        }.cgImage
+    }()
+
+    private func sparkle(at point: CGPoint) {
+        let emitter = CAEmitterLayer()
+        emitter.emitterPosition = point
+        emitter.emitterShape = .point
+        let cell = CAEmitterCell()
+        cell.contents = Self.sparkleImage
+        cell.birthRate = 140
+        cell.lifetime = 0.7
+        cell.velocity = 70
+        cell.velocityRange = 40
+        cell.emissionRange = .pi * 2
+        cell.scale = 0.45
+        cell.scaleRange = 0.2
+        cell.scaleSpeed = -0.5
+        cell.spin = 2
+        cell.spinRange = 3
+        cell.alphaSpeed = -1.4
+        cell.color = Palette.goldTrim.cgColor
+        emitter.emitterCells = [cell]
+        layer.addSublayer(emitter)
+        // A short puff, then the sparkles fade on their own.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(90))
+            emitter.birthRate = 0
+            try? await Task.sleep(for: .seconds(1))
+            emitter.removeFromSuperlayer()
+        }
     }
 }
 
@@ -234,7 +409,7 @@ final class GutterView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = UIColor(white: 1, alpha: 0.03)
+        backgroundColor = Palette.deepSpace.withAlphaComponent(0.35)
         contentMode = .redraw
         isAccessibilityElement = false
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
@@ -271,19 +446,19 @@ final class GutterView: UIView {
             let note = notes[line]
             let text = (note?.text ?? "\(line)") as NSString
             let color: UIColor = switch note?.style {
-            case .loop: SceneArt.guideGold
-            case .yes: .systemOrange
-            case .no: .systemTeal
-            case nil: line == errorLine ? .systemRed : line == activeLine ? .white : UIColor(white: 1, alpha: 0.35)
+            case .loop: Palette.goldTrim
+            case .yes: Palette.ember
+            case .no: Palette.nebulaBlue
+            case nil: line == errorLine ? Palette.ember : line == activeLine ? Palette.deepSpace : Palette.starlight.withAlphaComponent(0.35)
             }
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
             let size = text.size(withAttributes: attributes)
-            if line == activeLine {
-                let pill = CGRect(x: 3, y: caret.midY - size.height / 2 - 2, width: bounds.width - 6, height: size.height + 4)
-                SceneArt.trailColor.withAlphaComponent(0.35).setFill()
-                UIBezierPath(roundedRect: pill, cornerRadius: 5).fill()
+            if line == activeLine && note == nil {
+                let pill = CGRect(x: Space.xs, y: caret.midY - size.height / 2 - 2, width: bounds.width - Space.s, height: size.height + 4)
+                Palette.goldTrim.setFill()
+                UIBezierPath(roundedRect: pill, cornerRadius: Radius.small / 2).fill()
             }
-            text.draw(at: CGPoint(x: bounds.width - size.width - 7, y: caret.midY - size.height / 2), withAttributes: attributes)
+            text.draw(at: CGPoint(x: bounds.width - size.width - Space.s, y: caret.midY - size.height / 2), withAttributes: attributes)
         }
     }
 
@@ -295,7 +470,7 @@ final class GutterView: UIView {
     }
 }
 
-/// Colors the code by kind of word, Xcode-style.
+/// Colors the code by kind of word, using only the palette.
 @MainActor
 struct SyntaxHighlighter {
     static var font: UIFont {
@@ -303,21 +478,22 @@ struct SyntaxHighlighter {
     }
 
     static var baseAttributes: [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: UIColor.white]
+        [.font: font, .foregroundColor: Palette.starlight]
     }
 
     private let rules: [(NSRegularExpression, UIColor)] = [
-        ("\\b(repeat|if|else)\\b", UIColor(red: 1, green: 0.48, blue: 0.7, alpha: 1)),
-        ("\\b(launch|move)\\b", UIColor(red: 0.4, green: 0.85, blue: 1, alpha: 1)),
-        ("\\b(up|down|left|right)\\b", UIColor(red: 1, green: 0.7, blue: 0.35, alpha: 1)),
-        ("\\basteroidAhead\\b", UIColor(red: 0.95, green: 0.85, blue: 0.4, alpha: 1)),
-        ("\\b\\d+\\b", UIColor(red: 0.75, green: 0.65, blue: 1, alpha: 1)),
-        ("//.*", UIColor(red: 0.5, green: 0.56, blue: 0.62, alpha: 1))
+        ("\\b(repeat|if|else)\\b", Palette.goldTrim),
+        ("\\b(launch|move)\\b", Palette.nebulaBlue),
+        ("\\b(up|down|left|right)\\b", Palette.ember),
+        ("\\basteroidAhead\\b", Palette.goldTrim.mixed(with: Palette.starlight, 0.4)),
+        ("\\b(suitUp|stargaze|hello|hi)\\b", Palette.goldTrim.mixed(with: Palette.ember, 0.4)),
+        ("\\b\\d+\\b", Palette.nebulaBlue.mixed(with: Palette.starlight, 0.4)),
+        ("//.*", Palette.starlight.withAlphaComponent(0.4))
     ].compactMap { pattern, color in
         (try? NSRegularExpression(pattern: pattern)).map { ($0, color) }
     }
 
-    func apply(to textView: UITextView, activeLine: Int?, errorLine: Int?, selectedLine: Int?) {
+    func apply(to textView: UITextView, activeLine: Int?, errorLine: Int?, selectedLine: Int?, cursorLine: Int?) {
         let storage = textView.textStorage
         let text = storage.string as NSString
         let everything = NSRange(location: 0, length: text.length)
@@ -330,17 +506,19 @@ struct SyntaxHighlighter {
             }
         }
 
+        // Later entries win: the running line and errors matter more than where the cursor is.
         let lineColors: [(Int?, UIColor)] = [
-            (selectedLine, UIColor.systemYellow.withAlphaComponent(0.22)),
-            (activeLine, SceneArt.trailColor.withAlphaComponent(0.3)),
-            (errorLine, UIColor.systemRed.withAlphaComponent(0.3))
+            (cursorLine, Palette.starlight.withAlphaComponent(0.06)),
+            (selectedLine, Palette.goldTrim.withAlphaComponent(0.2)),
+            (activeLine, Palette.goldTrim.withAlphaComponent(0.28)),
+            (errorLine, Palette.ember.withAlphaComponent(0.3))
         ]
         for case let (line?, color) in lineColors {
             guard let range = Self.range(ofLine: line, in: text) else { continue }
             storage.addAttribute(.backgroundColor, value: color, range: range)
             if line == errorLine {
                 storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.thick.rawValue | NSUnderlineStyle.patternDot.rawValue, range: range)
-                storage.addAttribute(.underlineColor, value: UIColor.systemRed, range: range)
+                storage.addAttribute(.underlineColor, value: Palette.ember, range: range)
             }
         }
         storage.endEditing()

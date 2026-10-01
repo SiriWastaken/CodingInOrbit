@@ -7,34 +7,28 @@
 
 import SwiftUI
 
+/// Run, or Stop while the rocket is flying. When the code is ready to go, it breathes with a soft gold glow.
 struct RunButtonView: View {
     let isRunning: Bool
+    let isReady: Bool
     let onRun: () -> Void
     let onStop: () -> Void
 
-    private var tint: Color { isRunning ? .red : .green }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
             isRunning ? onStop() : onRun()
         } label: {
             Label(isRunning ? "Stop" : "Run", systemImage: isRunning ? "stop.fill" : "play.fill")
-                .font(.callout)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 5)
-                .background(
-                    LinearGradient(
-                        colors: [tint, tint.opacity(0.7)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .foregroundColor(.white)
-                .cornerRadius(8)
-                .shadow(color: tint.opacity(0.3), radius: 4, x: 0, y: 2)
+                .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BouncyButtonStyle(kind: isRunning ? .ember : .primary))
+        .phaseAnimator(isReady && !isRunning && !reduceMotion ? [false, true] : [false]) { content, glowing in
+            content.shadow(color: Color.goldTrim.opacity(glowing ? 0.8 : 0), radius: glowing ? Space.l : Space.xs)
+        } animation: { _ in
+            Motion.breathe
+        }
         .keyboardShortcut("r", modifiers: .command)
         .accessibilityHint(isRunning ? "Stops the rocket" : "Runs your code")
     }

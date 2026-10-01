@@ -71,7 +71,10 @@ final class GameSession {
     private(set) var selectedLine: Int?
     private(set) var gutterNotes: [Int: GutterNote] = [:]
     private(set) var guideMessage: String
+    private(set) var guideMood: GuideMood = .calm
     private(set) var stageDescription = ""
+    /// How far through the current run the replay is, from 0 to 1.
+    private(set) var runProgress: Double = 0
     private var briefingIndex = 0
 
     @ObservationIgnored let scene: OrbitScene
@@ -83,12 +86,24 @@ final class GameSession {
     @ObservationIgnored private let haptics = HapticsPlayer()
     @ObservationIgnored private let sound = SoundPlayer()
     @ObservationIgnored private let narrator = Narrator()
+    @ObservationIgnored private var hasMadeMistake = false
+    @ObservationIgnored private var hasCheeredAllBlocks = false
+    @ObservationIgnored private var isSuitedUp = false
+
+    /// Commands the rocket has carried out since the app opened, across every mission.
+    private static var lifetimeCommands = 0
 
     var isRunning: Bool { phase == .running }
     var hasMoreBriefing: Bool { briefingIndex < mission.briefing.count - 1 }
 
     var result: MissionResult? {
         if case .finished(let result) = phase { result } else { nil }
+    }
+
+    /// True when the code parses and has something to run. The Run button glows when it is.
+    var isCodeReady: Bool {
+        guard phase == .editing, case .success(let program) = Parser.parse(code) else { return false }
+        return !program.isEmpty
     }
 
     init(mission: Mission) {
@@ -106,11 +121,13 @@ final class GameSession {
         scene.style = settings.style
         resetStage(newField: false)
         narrator.speak(guideMessage, settings: settings)
+        sound.startAmbience(enabled: settings.sound)
     }
 
     func leave() {
         stop()
         narrator.stop()
+        sound.stopAmbience()
     }
 
     // MARK: - The Guiding Light
@@ -128,11 +145,12 @@ final class GameSession {
     func showHint() {
         if phase != .editing { returnToEditing() }
         scene.showHint(mission.hintPath(in: world))
-        setGuide(mission.hint)
+        setGuide(mission.hint, mood: .curious)
     }
 
-    private func setGuide(_ message: String, speak: Bool = true) {
+    private func setGuide(_ message: String, mood: GuideMood? = nil, speak: Bool = true) {
         guideMessage = message
+        if let mood { guideMood = mood }
         if speak { narrator.speak(message, settings: settings) }
     }
 
@@ -140,6 +158,9 @@ final class GameSession {
 
     func insert(_ snippet: String) {
         editor.insert(snippet)
+        haptics.play(.pop, enabled: settings.haptics)
+        sound.play(.pop, enabled: settings.sound)
+        cheerIfAllBlocksUsed()
     }
 
     /// Called by the editor whenever the player changes the code.
@@ -147,30 +168,44 @@ final class GameSession {
         errorLine = nil
         if selectedLine != nil { selectLine(nil) }
         if case .finished = phase { returnToEditing() }
+        if guideMood == .concerned { guideMood = .calm }
     }
 
     func restoreStarterCode() {
         stop()
         code = mission.starterCode
         codeDidChange()
+        setGuide(GuideVoice.freshStart, mood: .calm)
     }
 
     /// Links a line of code to its part of the trail. Choosing the same line again clears it.
     func selectLine(_ line: Int?) {
         selectedLine = (line == selectedLine) ? nil : line
         scene.highlightTrail(line: selectedLine)
+        if line != nil { haptics.play(.select, enabled: settings.haptics) }
+    }
+
+    /// "Look at you go!" the first time the code uses every block this mission offers.
+    private func cheerIfAllBlocksUsed() {
+        guard !hasCheeredAllBlocks, mission.blocks.count > 1 else { return }
+        let markers: [BlockKind: String] = [.launch: "launch(", .move: "move(", .repeatLoop: "repeat", .condition: "if "]
+        let usedAll = mission.blocks.allSatisfy { kind in markers[kind].map { code.contains($0) } ?? true }
+        guard usedAll else { return }
+        hasCheeredAllBlocks = true
+        setGuide(GuideVoice.allBlocksUsed, mood: .delighted)
     }
 
     // MARK: - Running
 
     func run() {
         guard !isRunning else { return }
+        sound.play(.click, enabled: settings.sound)
         switch Parser.parse(code) {
         case .failure(let error):
             report(error)
         case .success(let program):
             guard !program.isEmpty else {
-                setGuide("Your code is empty! Tap a block below, or type a command like launch().")
+                setGuide(GuideVoice.emptyCode, mood: .curious)
                 haptics.play(.error, enabled: settings.haptics)
                 return
             }
@@ -179,10 +214,11 @@ final class GameSession {
             errorLine = nil
             selectedLine = nil
             gutterNotes = [:]
+            runProgress = 0
 
             let trace = Interpreter.run(program, in: world)
             phase = .running
-            setGuide("Watch closely. The highlighted line is the one the rocket is running.", speak: false)
+            setGuide(GuideVoice.pick(GuideVoice.running), mood: .curious, speak: false)
             runTask = Task { [weak self] in
                 await self?.play(trace, program: program)
             }
@@ -196,6 +232,8 @@ final class GameSession {
         phase = .editing
         activeLine = nil
         gutterNotes = [:]
+        runProgress = 0
+        guideMood = .calm
         resetStage(newField: false)
     }
 
@@ -204,6 +242,7 @@ final class GameSession {
         phase = .editing
         activeLine = nil
         gutterNotes = [:]
+        runProgress = 0
         resetStage(newField: true)
     }
 
@@ -225,7 +264,7 @@ final class GameSession {
         var rocket = world.rocket
         var launched = world.isLaunched
 
-        for event in trace.events {
+        for (index, event) in trace.events.enumerated() {
             let duration = stepDuration * event.kind.pace
             activeLine = event.line
             updateNotes(for: event)
@@ -233,9 +272,16 @@ final class GameSession {
             giveFeedback(for: event, rocketAt: rocket)
 
             switch event.kind {
-            case .moved(_, let to, _): rocket = to
-            case .launched: launched = true
-            default: break
+            case .moved(_, let to, _):
+                rocket = to
+                countCommand()
+            case .launched:
+                launched = true
+                countCommand()
+            case .easterEgg(let egg):
+                reactToEasterEgg(egg)
+            default:
+                break
             }
             stageDescription = world.spokenDescription(rocketAt: rocket, launched: launched)
 
@@ -244,15 +290,44 @@ final class GameSession {
             } catch {
                 return
             }
+            runProgress = Double(index + 1) / Double(trace.events.count)
         }
 
         activeLine = nil
+        // Code that's only secret commands is just for fun: no win or loss.
+        if program.allSatisfy(\.isEasterEgg) {
+            phase = .editing
+            runProgress = 0
+            fieldIsFresh = true
+            return
+        }
         finish(with: mission.evaluate(trace, program: program))
+    }
+
+    private func countCommand() {
+        Self.lifetimeCommands += 1
+        if Self.lifetimeCommands == 10 {
+            setGuide(GuideVoice.tenthCommand, mood: .delighted, speak: false)
+        }
+    }
+
+    private func reactToEasterEgg(_ egg: EasterEgg) {
+        sound.play(.sparkle, enabled: settings.sound)
+        switch egg {
+        case .hello:
+            setGuide(GuideVoice.pick(GuideVoice.hello), mood: .delighted)
+        case .suitUp:
+            setGuide(isSuitedUp ? GuideVoice.suitUpAgain : GuideVoice.suitUp, mood: .delighted)
+            isSuitedUp = true
+        case .stargaze:
+            setGuide(GuideVoice.stargaze, mood: .delighted)
+        }
     }
 
     private func finish(with result: MissionResult) {
         phase = .finished(result)
         runTask = nil
+        runProgress = 1
         if result.succeeded {
             scene.celebrate()
             haptics.play(.success, enabled: settings.haptics)
@@ -260,15 +335,19 @@ final class GameSession {
             MissionProgress.markCompleted(mission.id)
         } else {
             errorLine = result.line
+            hasMadeMistake = true
             haptics.play(.error, enabled: settings.haptics)
             sound.play(.error, enabled: settings.sound)
         }
-        setGuide(result.reflection ?? result.message)
+        setGuide(result.reflection ?? result.message, mood: result.succeeded ? .delighted : .concerned)
     }
 
     private func report(_ error: CodeError) {
         errorLine = error.line
-        setGuide("Line \(error.line): \(error.explanation)")
+        // The very first slip of the session gets a little reassurance first.
+        let opener = hasMadeMistake ? "" : GuideVoice.firstMistake + " "
+        hasMadeMistake = true
+        setGuide("\(opener)Line \(error.line): \(error.explanation)", mood: .concerned)
         haptics.play(.error, enabled: settings.haptics)
         sound.play(.error, enabled: settings.sound)
         scene.play(StepEvent(line: error.line, kind: .runtimeError(error)), duration: 0.5)
@@ -315,6 +394,8 @@ final class GameSession {
         case .runtimeError:
             haptics.play(.error, enabled: settings.haptics)
             sound.play(.error, pan: pan(rocket), enabled: settings.sound)
+        case .easterEgg:
+            haptics.play(.success, enabled: settings.haptics)
         case .loopIterationStarted:
             break
         }

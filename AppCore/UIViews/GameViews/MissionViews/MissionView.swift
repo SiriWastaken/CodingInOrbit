@@ -14,7 +14,9 @@ struct MissionView: View {
     @EnvironmentObject private var accessibilityManager: AccessibilityManager
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(MissionProgress.storageKey) private var completedMissions = ""
     @State private var session: GameSession
+    @State private var isEditorFocused = false
 
     init(mission: Mission) {
         _session = State(initialValue: GameSession(mission: mission))
@@ -42,7 +44,8 @@ struct MissionView: View {
             }
         }
         .id(session.mission.id)
-        .background(Color(red: 0.02, green: 0.03, blue: 0.08).ignoresSafeArea())
+        .transition(.drift)
+        .background(CozyBackground(starCount: 40))
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -59,26 +62,30 @@ struct MissionView: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private var header: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Space.m) {
             Button {
                 dismiss()
             } label: {
-                Label("Missions", systemImage: "chevron.left")
-                    .font(.headline)
+                IconButtonLabel(systemName: "chevron.left")
             }
-            .tint(.white)
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityLabel("Back to missions")
 
             Spacer()
 
-            VStack(spacing: 2) {
+            VStack(spacing: Space.xs) {
                 Text("MISSION \(session.mission.number) · \(session.mission.concept.uppercased())")
-                    .font(.caption2.weight(.semibold))
+                    .font(Typeface.caption)
                     .tracking(2)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Color.starlight.opacity(0.55))
                 Text(session.mission.title)
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                    .font(Typeface.title)
+                    .foregroundStyle(Color.starlight)
+                ConstellationProgress(total: Mission.all.count,
+                                      completed: MissionProgress.completedIDs(from: completedMissions).count,
+                                      starSize: Space.m)
             }
             .accessibilityElement(children: .combine)
 
@@ -91,10 +98,10 @@ struct MissionView: View {
                     }
                 }
             } label: {
-                Image(systemName: session.speed.icon)
-                    .font(.headline)
+                IconButtonLabel(systemName: session.speed.icon)
             }
-            .tint(.white)
+            .menuStyle(.button)
+            .buttonStyle(PressableButtonStyle())
             .accessibilityLabel("Run speed")
             .accessibilityValue(session.speed.title)
 
@@ -106,29 +113,32 @@ struct MissionView: View {
                     session.restoreStarterCode()
                 }
             } label: {
-                Image(systemName: "arrow.counterclockwise.circle")
-                    .font(.headline)
+                IconButtonLabel(systemName: "arrow.counterclockwise")
             }
-            .tint(.white)
+            .menuStyle(.button)
+            .buttonStyle(PressableButtonStyle())
             .accessibilityLabel("Reset")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.black.opacity(0.4))
+        .padding(.horizontal, Space.l)
+        .padding(.vertical, Space.s)
+        .arrive(from: -Space.l)
     }
 
     // MARK: - Workspace
 
+    @ViewBuilder
     private var workspace: some View {
         VStack(spacing: 0) {
             GuidingLightView(
                 message: session.guideMessage,
+                mood: session.guideMood,
                 canAdvance: session.hasMoreBriefing,
-                onAdvance: session.advanceBriefing,
-                onHint: session.showHint,
-                onSpeak: session.repeatGuide
+                onAdvance: { session.advanceBriefing() },
+                onHint: { session.showHint() },
+                onSpeak: { session.repeatGuide() }
             )
-            .padding(12)
+            .padding(Space.m)
+            .arrive(delay: 0.05)
 
             CodeEditorView(
                 code: $session.code,
@@ -138,26 +148,37 @@ struct MissionView: View {
                 notes: session.gutterNotes,
                 isEditable: !session.isRunning,
                 bridge: session.editor,
-                onEdit: session.codeDidChange,
-                onLineTapped: { session.selectLine($0) }
+                onEdit: { session.codeDidChange() },
+                onLineTapped: { session.selectLine($0) },
+                onFocusChange: { focused in isEditorFocused = focused }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+            // The editor glows softly while you're typing in it.
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                    .strokeBorder(isEditorFocused ? Color.goldTrim.opacity(0.6) : Color.starlight.opacity(0.08), lineWidth: isEditorFocused ? 1.5 : 1)
+            )
+            .shadow(color: Color.goldTrim.opacity(isEditorFocused ? 0.25 : 0), radius: Space.m)
+            .animation(.easeInOut(duration: 0.3), value: isEditorFocused)
+            .padding(.horizontal, Space.m)
+            .padding(.bottom, Space.s)
+            .arrive(delay: 0.12)
 
             CommandBarView(
                 blocks: blocks(for: session.mission.blocks),
                 isRunning: session.isRunning,
-                onInsert: session.insert,
-                onRun: session.run,
-                onStop: session.stop
+                isReady: session.isCodeReady,
+                onInsert: { session.insert($0) },
+                onRun: { session.run() },
+                onStop: { session.stop() }
             )
+            .arrive(delay: 0.2)
         }
     }
 
     // MARK: - Stage
 
+    @ViewBuilder
     private var stage: some View {
         ZStack(alignment: .bottom) {
             SpriteView(scene: session.scene, preferredFramesPerSecond: 60)
@@ -166,19 +187,30 @@ struct MissionView: View {
                 .accessibilityValue(session.stageDescription)
                 .accessibilityAddTraits(.updatesFrequently)
 
+            if session.isRunning || session.result != nil {
+                OrbitProgressBar(progress: session.runProgress)
+                    .padding(.horizontal, Space.xl)
+                    .padding(.top, Space.m)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity)
+            }
+
             if let result = session.result {
                 MissionResultView(
                     result: result,
                     isMoonMission: session.mission.id == .toTheMoon,
                     nextMission: session.mission.next,
                     onTryAgain: { session.stop() },
-                    onNext: goToNextMission
+                    onNext: { goToNextMission() }
                 )
-                .padding(16)
+                .padding(Space.l)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(systemReduceMotion ? nil : .spring(duration: 0.4), value: session.result)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
+        .padding(Space.s)
+        .animation(systemReduceMotion ? .easeOut(duration: 0.2) : Motion.arrive, value: session.result)
+        .animation(.easeInOut(duration: 0.3), value: session.isRunning)
     }
 
     private func goToNextMission() {
@@ -186,7 +218,9 @@ struct MissionView: View {
         session.leave()
         let nextSession = GameSession(mission: next)
         nextSession.settings = settings
-        session = nextSession
+        withAnimation(systemReduceMotion ? .easeOut(duration: 0.2) : Motion.arrive) {
+            session = nextSession
+        }
         nextSession.start()
     }
 }

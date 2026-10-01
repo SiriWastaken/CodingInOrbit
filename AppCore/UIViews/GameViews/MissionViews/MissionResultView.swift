@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// The card shown over the stage when a flight ends.
+/// The card that slides up over the stage when a flight ends.
 struct MissionResultView: View {
     let result: MissionResult
     let isMoonMission: Bool
@@ -16,46 +16,55 @@ struct MissionResultView: View {
     let onNext: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(result.title, systemImage: result.succeeded ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                .font(.title3.bold())
-                .foregroundStyle(result.succeeded ? .green : .orange)
+        VStack(alignment: .leading, spacing: Space.m) {
+            HStack(spacing: Space.s) {
+                if result.succeeded {
+                    SparkleShape()
+                        .fill(Color.goldTrim)
+                        .frame(width: Space.xl, height: Space.xl)
+                        .shadow(color: .goldTrim, radius: Space.s)
+                } else {
+                    CrescentShape()
+                        .fill(Color.ember, style: FillStyle(eoFill: true))
+                        .frame(width: Space.xl, height: Space.xl)
+                }
+                Text(result.title)
+                    .font(Typeface.title)
+                    .foregroundStyle(result.succeeded ? Color.goldTrim : Color.starlight)
+            }
+            .accessibilityElement(children: .combine)
 
             Text(result.message)
-                .font(.callout)
-                .foregroundStyle(.white)
+                .font(Typeface.body)
+                .foregroundStyle(Color.starlight)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 10) {
+            HStack(spacing: Space.s) {
                 Button(action: onTryAgain) {
-                    Label(isMoonMission ? "New Field" : "Try Again", systemImage: isMoonMission ? "dice.fill" : "arrow.counterclockwise")
+                    Label(isMoonMission ? "New field" : "Try again", systemImage: isMoonMission ? "sparkles" : "arrow.counterclockwise")
                 }
-                .buttonStyle(.bordered)
-                .tint(.white)
+                .buttonStyle(BouncyButtonStyle(kind: .secondary))
 
                 if result.succeeded, let nextMission {
                     Button(action: onNext) {
-                        Label("Mission \(nextMission.number): \(nextMission.title)", systemImage: "arrow.right")
+                        Label("On to \(nextMission.title)", systemImage: "arrow.right")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                    .buttonStyle(BouncyButtonStyle(kind: .primary))
                 }
             }
-            .font(.callout.weight(.semibold))
-            .padding(.top, 4)
+            .padding(.top, Space.xs)
         }
-        .padding(18)
+        .padding(Space.l)
         .frame(maxWidth: 460, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.12), lineWidth: 1))
-        .environment(\.colorScheme, .dark)
+        .cozyPanel(cornerRadius: Radius.card)
+        .rotationEffect(.degrees(result.succeeded ? -0.8 : 0.6))
         .accessibilityElement(children: .contain)
     }
 }
 
 #Preview {
-    MissionResultView(result: MissionResult(succeeded: true, title: "Docked!", message: "You reached the space station in 5 moves."),
+    MissionResultView(result: MissionResult(succeeded: true, title: "Touchdown!", message: "You did it, Commander. The stars are yours."),
                       isMoonMission: false, nextMission: .lowEarthOrbit, onTryAgain: {}, onNext: {})
         .padding()
-        .background(Color.black)
+        .background(CozyBackground())
 }

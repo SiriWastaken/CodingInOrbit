@@ -58,11 +58,11 @@ extension Mission {
         title: "Liftoff",
         concept: "Sequencing",
         icon: "flame.fill",
-        summary: "Fly your rocket to the space station, one line at a time.",
+        summary: "Hop, hop, hop to the space station, one line at a time.",
         briefing: [
-            "Hello, explorer. I'm the Guiding Light, and I'll be with you on every mission.",
-            "Your rocket follows your code exactly, one line at a time, from top to bottom.",
-            "Fly to the space station. Add moves to your code, then press Run and watch what happens."
+            "Oh, hello there! I'm the Guiding Light. I've been watching these stars for a very long time, and I'd love some company.",
+            "Here's a secret: your rocket does exactly what you write. One line at a time, top to bottom. No more, no less.",
+            "See that little space station? Let's fly there. Add a few moves, press Run, and watch what happens."
         ],
         starterCode: """
         // Your code runs from top to bottom, one line at a time.
@@ -72,7 +72,7 @@ extension Mission {
 
         """,
         blocks: [.launch, .move],
-        hint: "Follow the dotted line and count the squares. How many moves up? How many to the right? Each move is one line of code."
+        hint: "Follow my dotted line and count the squares. How many hops up? How many to the right? One line of code for each hop."
     )
 
     static let lowEarthOrbit = Mission(
@@ -81,11 +81,11 @@ extension Mission {
         title: "Low Earth Orbit",
         concept: "Loops",
         icon: "arrow.triangle.2.circlepath",
-        summary: "Circle Earth 3 times, without writing the same code 3 times.",
+        summary: "Circle Earth 3 times, without writing the same thing 3 times.",
         briefing: [
-            "Welcome to orbit. Up here, going around and around is how you stay in space.",
-            "The 4 moves in your code take the rocket around Earth once. But this mission needs 3 orbits.",
-            "You could copy the lines 3 times... or you could tell the rocket to repeat them."
+            "Up here, going around and around is how you stay in space. Funny, isn't it?",
+            "Those 4 moves take the rocket around Earth once. But Earth would love 3 visits.",
+            "You could copy the lines 3 times... or you could find a way to say \"again.\" Hmm."
         ],
         starterCode: """
         // One trip around Earth takes 4 moves.
@@ -97,7 +97,7 @@ extension Mission {
 
         """,
         blocks: [.move, .repeatLoop],
-        hint: "Put the 4 moves inside repeat 3 { }. Everything between the braces runs again each time around."
+        hint: "Try tucking your 4 moves inside repeat 3 { }. Whatever's between the braces happens again, and again, and again."
     )
 
     static let toTheMoon = Mission(
@@ -106,11 +106,11 @@ extension Mission {
         title: "To The Moon",
         concept: "Conditionals",
         icon: "moon.stars.fill",
-        summary: "Cross an asteroid field that changes every time you fly.",
+        summary: "Cross an asteroid field that rearranges itself every flight.",
         briefing: [
-            "The Moon is close now. But the asteroid field ahead changes every time you fly.",
-            "You can't plan every move in advance. Instead, give your rocket a sensor: asteroidAhead.",
-            "With if, your code can check before it moves, and decide for itself."
+            "The Moon! Isn't she lovely tonight? There's just one problem: these asteroids never sit still.",
+            "Every time you fly, they'll be somewhere new. So we can't plan every move ahead of time.",
+            "But your rocket has a sensor called asteroidAhead. What if it could look before it leaps?"
         ],
         starterCode: """
         // The asteroids move every time you run your code!
@@ -122,7 +122,7 @@ extension Mission {
 
         """,
         blocks: [.launch, .move, .repeatLoop, .condition],
-        hint: "Inside your repeat, before move(up), check: if asteroidAhead { move(right) }. The rocket will look every time around."
+        hint: "Inside your repeat, just before move(up), ask the rocket to check: if asteroidAhead { move(right) }. It'll look every single time."
     )
 }
 
@@ -207,12 +207,12 @@ extension Mission {
     func evaluate(_ trace: Trace, program: [Statement]) -> MissionResult {
         switch trace.halt {
         case .crashed(let line):
-            return MissionResult(succeeded: false, title: "Asteroid impact!",
-                                 message: "Line \(line) flew the rocket into an asteroid.",
-                                 reflection: "Tap the rocket's trail to see which line made each move. Which one should change?",
+            return MissionResult(succeeded: false, title: "Bonk!",
+                                 message: "Line \(line) steered the rocket right into an asteroid.",
+                                 reflection: GuideVoice.pick(GuideVoice.crashes),
                                  line: line)
         case .error(let error):
-            return MissionResult(succeeded: false, title: "The rocket got confused",
+            return MissionResult(succeeded: false, title: "Hmm, that didn't work",
                                  message: error.message, reflection: error.hint, line: error.line)
         case nil:
             break
@@ -223,52 +223,62 @@ extension Mission {
         case .liftoff:
             guard let station = world.station else { break }
             if world.rocket == station {
+                // The shortest route is 5 moves. Doing it in exactly 5 deserves a little extra.
+                let perfect = trace.moveCount == 5
                 return MissionResult(succeeded: true, title: "Docked!",
-                                     message: "You reached the space station in \(trace.moveCount) moves.",
-                                     reflection: "Every line ran in order, top to bottom. Change the order and you change the flight. That's called sequencing, and you just did it.")
+                                     message: perfect
+                                        ? "Not a single wasted move. The station's lights are on just for you."
+                                        : "You made it, Commander! The station's lights are on just for you.",
+                                     reflection: "Every line ran in order, top to bottom. Swap two lines and you'd get a whole different flight. That's sequencing, and you just did it.")
             }
             if !world.isLaunched {
                 return MissionResult(succeeded: false, title: "Still on the pad",
-                                     message: "The rocket never left the ground.",
-                                     reflection: "Start your code with launch().")
+                                     message: "The rocket's still sitting on the pad, waiting for its big moment.",
+                                     reflection: "Every flight starts with launch(). Try putting it at the very top.")
             }
-            return MissionResult(succeeded: false, title: "Not there yet",
-                                 message: "You stopped short. The station is \(World.offsetPhrase(from: world.rocket, to: station)) from the rocket.",
-                                 reflection: "Add a move for each square still between you and the station.")
+            return MissionResult(succeeded: false, title: "So close!",
+                                 message: "The station's still \(World.offsetPhrase(from: world.rocket, to: station)) from you.",
+                                 reflection: "Add one more move for each square in the way. You've got this.")
 
         case .lowEarthOrbit:
             let orbits = Self.orbitCount(of: trace.path, around: world.planetVertex)
             guard orbits >= Self.requiredOrbits else {
                 let message = orbits == 0
-                    ? "The rocket didn't make it all the way around Earth."
-                    : "That's \(orbits) \(orbits == 1 ? "orbit" : "orbits"). Earth needs \(Self.requiredOrbits)!"
+                    ? "Almost around! The rocket didn't quite make it all the way around Earth."
+                    : "That's \(orbits) \(orbits == 1 ? "orbit" : "orbits") so far. Earth's hoping for \(Self.requiredOrbits)!"
                 return MissionResult(succeeded: false, title: "\(orbits) of \(Self.requiredOrbits) orbits",
                                      message: message,
-                                     reflection: program.usesRepeat ? "Check your repeat number." : "Try wrapping your moves in repeat 3 { }.")
+                                     reflection: program.usesRepeat ? "Peek at your repeat number. How many times should it go around?" : "What if you wrapped those moves in repeat 3 { }?")
             }
-            let reflection = program.usesRepeat
-                ? "Look at the rings. Each one is a single trip through your loop. A loop is code that comes back around, just like an orbit."
-                : "You did it with \(program.commandCount) lines. Can you do it with fewer by using repeat?"
-            return MissionResult(succeeded: true, title: "\(orbits) orbits complete!",
-                                 message: "\(program.commandCount) lines of code flew \(trace.moveCount) moves.",
-                                 reflection: reflection)
+            guard program.usesRepeat else {
+                return MissionResult(succeeded: true, title: "Three times around!",
+                                     message: "You flew it with \(program.commandCount) lines. That's dedication!",
+                                     reflection: "That works! But I wonder... could repeat do the same job with fewer lines?")
+            }
+            // 5 commands (a repeat holding 4 moves) is as short as it gets.
+            let elegant = program.commandCount == 5
+            return MissionResult(succeeded: true, title: "Three times around!",
+                                 message: elegant
+                                    ? "Just \(program.commandCount) lines for \(trace.moveCount) moves through space. Beautifully done."
+                                    : "\(program.commandCount) lines of code, \(trace.moveCount) moves through space. That's the magic of a loop.",
+                                 reflection: "See the rings? Each one is a single trip through your loop. A loop is code that comes back around, just like an orbit.")
 
         case .toTheMoon:
             guard let moonRow = world.moonRow, world.rocket.y == moonRow else {
                 let rows = world.rocket.y - (world.moonRow ?? 0)
                 return MissionResult(succeeded: false, title: "Not there yet",
-                                     message: "The Moon is still \(rows) \(rows == 1 ? "row" : "rows") above you.",
-                                     reflection: "Keep moving up. Does your repeat run enough times?")
+                                     message: "The Moon's still \(rows) \(rows == 1 ? "row" : "rows") up. She's waiting!",
+                                     reflection: "Does your repeat run enough times to get all the way up?")
             }
             let crashes = Self.stressTest(program, mission: self)
             guard crashes == 0 else {
                 return MissionResult(succeeded: false, title: "Lucky landing!",
-                                     message: "You made it, but I tried your code on \(Self.stressTestFields) new asteroid fields and it failed on \(crashes).",
-                                     reflection: "Code that only works once isn't finished yet. Use if asteroidAhead to check before each move up.")
+                                     message: "You made it! But on \(Self.stressTestFields) new asteroid fields, your code bumped into trouble \(crashes) \(crashes == 1 ? "time" : "times").",
+                                     reflection: "Code that only works once is a lucky guess. Let it check with if asteroidAhead, and it'll work every time.")
             }
             return MissionResult(succeeded: true, title: "Touchdown!",
-                                 message: "Your code landed on this field and \(Self.stressTestFields) new ones it had never seen.",
-                                 reflection: "Your code didn't know where the asteroids would be. It checked, then decided. That's a conditional: code that can think on its feet.")
+                                 message: "You did it, Commander. The stars are yours.",
+                                 reflection: "I tried your code on \(Self.stressTestFields) brand-new asteroid fields, and it landed every single time. It looked before it leaped. That's a conditional.")
         }
         return MissionResult(succeeded: false, title: "Hmm", message: "Something unexpected happened.")
     }

@@ -13,47 +13,87 @@ struct BlockButtonsView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(blocks) { block in
-                    // Blocks with one snippet insert it right away; others (like Move) open a menu.
-                    if let only = block.snippets.first, block.snippets.count == 1 {
-                        Button {
-                            onInsert(only.code)
-                        } label: {
-                            chip(for: block)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Insert \(block.title)")
-                    } else {
-                        Menu {
-                            ForEach(block.snippets) { snippet in
-                                Button(snippet.title, systemImage: snippet.icon) {
-                                    onInsert(snippet.code)
-                                }
-                            }
-                        } label: {
-                            chip(for: block)
-                        }
-                        .accessibilityLabel("Insert \(block.title)")
-                        .accessibilityHint("Opens a menu of choices")
-                    }
+            HStack(spacing: Space.s) {
+                ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+                    BlockChip(block: block, index: index, onInsert: onInsert)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, Space.xs)
+            .padding(.vertical, Space.s)
+        }
+    }
+}
+
+/// One block. Each sits at a slightly different tilt, like cards scattered on a desk,
+/// and gives a little wiggle when you add it to your code.
+private struct BlockChip: View {
+    let block: Block
+    let index: Int
+    let onInsert: (String) -> Void
+
+    @State private var wiggles = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var tilt: Double { [-2, 1.5, -1, 2][index % 4] }
+
+    private var accent: Color {
+        switch block.id {
+        case .launch, .move: .nebulaBlue
+        case .repeatLoop: .goldTrim
+        case .condition: .ember
         }
     }
 
-    private func chip(for block: Block) -> some View {
-        Label(block.title, systemImage: block.icon)
-            .font(.callout)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color.blue.opacity(0.15))
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.blue.opacity(0.2), lineWidth: 0.5)
-            )
+    var body: some View {
+        Group {
+            if let only = block.snippets.first, block.snippets.count == 1 {
+                Button {
+                    add(only.code)
+                } label: {
+                    chip
+                }
+                .buttonStyle(PressableButtonStyle())
+            } else {
+                Menu {
+                    ForEach(block.snippets) { snippet in
+                        Button(snippet.title, systemImage: snippet.icon) {
+                            add(snippet.code)
+                        }
+                    }
+                } label: {
+                    chip
+                }
+                .menuStyle(.button)
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityHint("Opens a menu of choices")
+            }
+        }
+        .accessibilityLabel("Insert \(block.title)")
+    }
+
+    private func add(_ code: String) {
+        wiggles += 1
+        onInsert(code)
+    }
+
+    private var chip: some View {
+        let isStill = reduceMotion
+        return Label(block.title, systemImage: block.icon)
+            .font(Typeface.button)
+            .foregroundStyle(Color.starlight)
+            .padding(.horizontal, Space.m)
+            .padding(.vertical, Space.s)
+            .background(Color.dusk, in: Capsule())
+            .overlay(Capsule().strokeBorder(accent.opacity(0.55), lineWidth: 1.5))
+            .shadow(color: Color.deepSpace.opacity(0.5), radius: Space.xs, y: 2)
+            .rotationEffect(.degrees(tilt))
+            .keyframeAnimator(initialValue: 0.0, trigger: wiggles) { content, angle in
+                content.rotationEffect(.degrees(isStill ? 0 : angle))
+            } keyframes: { _ in
+                SpringKeyframe(-9, duration: 0.08)
+                SpringKeyframe(7, duration: 0.1)
+                SpringKeyframe(-3, duration: 0.1)
+                SpringKeyframe(0, duration: 0.2)
+            }
     }
 }

@@ -10,10 +10,10 @@ import AVFoundation
 // Every sound is generated in code, so the app needs no audio files.
 // Sounds also carry information: moving up rises in pitch, moving down falls, and each sound
 // pans left or right to follow the rocket. Someone who can't see the screen can hear where
-// the rocket is going.
+// the rocket is going. Nothing is harsh: errors "boop", wins chime like a music box.
 
 enum SoundCue: CaseIterable {
-    case launch, moveUp, moveDown, moveSide, ping, ring, crash, success, error
+    case launch, moveUp, moveDown, moveSide, ping, ring, crash, success, error, pop, click, sparkle
 
     var duration: Double {
         switch self {
@@ -22,8 +22,11 @@ enum SoundCue: CaseIterable {
         case .ping: 0.35
         case .ring: 0.7
         case .crash: 0.9
-        case .success: 1.0
-        case .error: 0.32
+        case .success: 1.6
+        case .error: 0.4
+        case .pop: 0.12
+        case .click: 0.06
+        case .sparkle: 1.2
         }
     }
 }
@@ -35,6 +38,8 @@ final class SoundPlayer {
     private var nextVoice = 0
     private var buffers: [SoundCue: AVAudioPCMBuffer] = [:]
     private var isPrepared = false
+    private let ambience = AVAudioPlayerNode()
+    private var ambienceBuffer: AVAudioPCMBuffer?
 
     /// - Parameter pan: -1 is fully left, 1 is fully right.
     func play(_ cue: SoundCue, pan: Float = 0, enabled: Bool) {
@@ -45,6 +50,18 @@ final class SoundPlayer {
         voice.pan = max(-1, min(1, pan))
         voice.scheduleBuffer(buffer, at: nil, options: .interrupts)
         if !voice.isPlaying { voice.play() }
+    }
+
+    /// A very quiet, slowly breathing hum, like the hush of an observatory at night.
+    func startAmbience(enabled: Bool) {
+        guard enabled, prepareIfNeeded(), let ambienceBuffer, !ambience.isPlaying else { return }
+        ambience.volume = 0.05
+        ambience.scheduleBuffer(ambienceBuffer, at: nil, options: .loops)
+        ambience.play()
+    }
+
+    func stopAmbience() {
+        ambience.stop()
     }
 
     private func prepareIfNeeded() -> Bool {
@@ -65,6 +82,9 @@ final class SoundPlayer {
         for cue in SoundCue.allCases {
             buffers[cue] = Self.render(cue, format: format)
         }
+        engine.attach(ambience)
+        engine.connect(ambience, to: engine.mainMixerNode, format: format)
+        ambienceBuffer = Self.renderAmbience(format: format)
         do {
             try engine.start()
         } catch {
@@ -85,6 +105,23 @@ final class SoundPlayer {
         for index in 0..<Int(frameCount) {
             let time = Double(index) / sampleRate
             samples[index] = Float(synth.sample(cue, time: time) * 0.3)
+        }
+        return buffer
+    }
+
+    /// Four seconds that loop seamlessly: every frequency fits a whole number of cycles in the loop.
+    private static func renderAmbience(format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let sampleRate = format.sampleRate
+        let seconds = 4.0
+        let frameCount = AVAudioFrameCount(seconds * sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
+              let samples = buffer.floatChannelData?[0] else { return nil }
+        buffer.frameLength = frameCount
+        for index in 0..<Int(frameCount) {
+            let t = Double(index) / sampleRate
+            let breath = 0.6 + 0.4 * Foundation.sin(2 * .pi * 0.25 * t)
+            let pad = Foundation.sin(2 * .pi * 110 * t) + 0.6 * Foundation.sin(2 * .pi * 165 * t) + 0.3 * Foundation.sin(2 * .pi * 220.25 * t)
+            samples[index] = Float(pad / 1.9 * breath * 0.5)
         }
         return buffer
     }
@@ -127,19 +164,34 @@ private struct Synth {
             let thump = Foundation.sin(2 * .pi * 70 * t) * exp(-progress * 8) * 0.8
             return blast + thump
         case .success:
-            // A rising arpeggio: C, E, G, high C.
-            let notes = [523.25, 659.25, 783.99, 1046.5]
-            return notes.enumerated().reduce(0) { total, note in
-                let start = Double(note.offset) * 0.11
-                guard t >= start else { return total }
-                let local = t - start
-                return total + Foundation.sin(2 * .pi * note.element * local) * exp(-local * 4) * 0.35
-            }
+            // A music-box chime: G, C, E, G, high C, each note ringing with a soft bell overtone.
+            return bell(notes: [783.99, 1046.5, 1318.5, 1568, 2093], spacing: 0.12, decay: 3.2, at: t) * 0.9
+        case .sparkle:
+            // A quick shimmer of high notes for secret surprises.
+            return bell(notes: [1568, 2093, 1760, 2637, 2349], spacing: 0.07, decay: 5, at: t) * 0.6
         case .error:
-            let inBlip = t < 0.12 || (t >= 0.16 && t < 0.28)
-            guard inBlip else { return 0 }
-            let local = t < 0.12 ? t : t - 0.16
-            return tanh(3 * Foundation.sin(2 * .pi * 180 * t)) * exp(-local * 12) * 0.6
+            // A gentle "boop": two soft sine notes sliding down, like a friendly shrug.
+            let first = t < 0.16 ? Foundation.sin(2 * .pi * (392 - 60 * t / 0.16) * t) * exp(-t * 14) : 0
+            let local = t - 0.16
+            let second = local >= 0 ? Foundation.sin(2 * .pi * (294 - 40 * local / 0.24) * local) * exp(-local * 10) : 0
+            return (first + second) * attack * 0.8
+        case .pop:
+            // A soft pop: a quick downward pitch drop, like a bubble.
+            return sine(900 - 600 * progress) * exp(-progress * 9) * attack
+        case .click:
+            // A satisfying click: a short, bright tick with a bit of body.
+            return (sine(1800) * 0.5 + lowpassedNoise(cutoff: 4000) * 3) * exp(-progress * 18) * attack
+        }
+    }
+
+    /// Notes that ring out one after another, each with an overtone that makes it sound like a little bell.
+    private func bell(notes: [Double], spacing: Double, decay: Double, at t: Double) -> Double {
+        notes.enumerated().reduce(0) { total, note in
+            let start = Double(note.offset) * spacing
+            guard t >= start else { return total }
+            let local = t - start
+            let tone = Foundation.sin(2 * .pi * note.element * local) + 0.25 * Foundation.sin(2 * .pi * note.element * 2.76 * local)
+            return total + tone * exp(-local * decay) * 0.28 * min(1, local / 0.004)
         }
     }
 

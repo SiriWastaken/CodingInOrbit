@@ -10,17 +10,15 @@ import SwiftUI
 struct InitGameView: View {
     var body: some View {
         ZStack {
-            Image("SplashScreen")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-                .opacity(0.3)  
-            
+            CozyBackground(splashOpacity: 0.16)
             CarouselView()
         }
     }
 }
 
 #Preview {
-    InitGameView()
+    NavigationStack {
+        InitGameView()
+    }
+    .environmentObject(AccessibilityManager())
 }

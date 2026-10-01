@@ -66,7 +66,7 @@ final class OrbitScene: SKScene {
         super.init(size: size)
         scaleMode = .resizeFill
         anchorPoint = .zero
-        backgroundColor = SceneArt.spaceColor
+        backgroundColor = Palette.deepSpace
         physicsWorld.gravity = .zero
 
         for (depth, layer) in [backdropLayer, decorLayer, gridLayer, objectLayer, trailLayer, ringLayer].enumerated() {
@@ -103,7 +103,8 @@ final class OrbitScene: SKScene {
         highlightedLine = nil
         hintPath = []
         effectLayer.removeAllChildren()
-        rocket.reset(launched: world.isLaunched)
+        rocket.reset(launched: world.isLaunched, reduceMotion: style.reduceMotion)
+        backdropLayer.speed = 1
         relayout()
     }
 
@@ -153,9 +154,9 @@ final class OrbitScene: SKScene {
         // A fixed seed keeps the stars in the same place every time.
         let random = GKMersenneTwisterRandomSource(seed: 2027)
 
-        let nebulaColors = [UIColor.purple, UIColor.blue, UIColor(red: 0, green: 0.6, blue: 0.7, alpha: 1)]
+        let nebulaColors = [Palette.nebulaBlue, Palette.ember, Palette.goldTrim]
         for color in nebulaColors {
-            let nebula = SceneArt.glow(color: color, diameter: max(size.width, size.height) * 0.8, alpha: 0.13)
+            let nebula = SceneArt.glow(color: color, diameter: max(size.width, size.height) * 0.8, alpha: 0.08)
             nebula.position = CGPoint(x: size.width * CGFloat(random.nextUniform()), y: size.height * CGFloat(random.nextUniform()))
             backdropLayer.addChild(nebula)
         }
@@ -186,19 +187,19 @@ final class OrbitScene: SKScene {
             // Earth's horizon curves along the bottom row, so the launch pad sits on the ground.
             let radius = gridWidth * 0.9
             let center = CGPoint(x: size.width / 2, y: gridOrigin.y + cellSize * 0.75 - radius)
-            let atmosphere = SceneArt.glow(color: UIColor(red: 0.3, green: 0.7, blue: 1, alpha: 1), diameter: radius * 2.35, alpha: 0.35)
+            let atmosphere = SceneArt.glow(color: Palette.nebulaBlue, diameter: radius * 2.35, alpha: 0.3)
             atmosphere.position = center
             decorLayer.addChild(atmosphere)
 
             let earth = SKShapeNode(circleOfRadius: radius)
             earth.position = center
-            earth.fillColor = UIColor(red: 0.07, green: 0.22, blue: 0.45, alpha: 1)
-            earth.strokeColor = UIColor(red: 0.45, green: 0.8, blue: 1, alpha: 0.6)
+            earth.fillColor = SceneArt.ocean.mixed(with: Palette.deepSpace, 0.35)
+            earth.strokeColor = Palette.nebulaBlue.withAlphaComponent(0.7)
             earth.lineWidth = 3
             for (x, width) in [(-0.3, 0.5), (0.35, 0.35)] as [(CGFloat, CGFloat)] {
                 let land = SKShapeNode(ellipseOf: CGSize(width: radius * width, height: radius * 0.1))
                 land.position = CGPoint(x: radius * x, y: radius * 0.82)
-                land.fillColor = UIColor(red: 0.25, green: 0.6, blue: 0.35, alpha: 0.9)
+                land.fillColor = SceneArt.sand.withAlphaComponent(0.85)
                 land.strokeColor = .clear
                 earth.addChild(land)
             }
@@ -237,12 +238,12 @@ final class OrbitScene: SKScene {
             path.addLine(to: CGPoint(x: rect.maxX, y: y))
         }
         let lines = SKShapeNode(path: path)
-        lines.strokeColor = UIColor(white: 1, alpha: style.highContrast ? 0.25 : 0.07)
+        lines.strokeColor = Palette.starlight.withAlphaComponent(style.highContrast ? 0.25 : 0.06)
         lines.lineWidth = 1
         gridLayer.addChild(lines)
 
         let border = SKShapeNode(rect: rect, cornerRadius: 8)
-        border.strokeColor = UIColor(white: 1, alpha: style.highContrast ? 0.6 : 0.18)
+        border.strokeColor = Palette.goldTrim.withAlphaComponent(style.highContrast ? 0.7 : 0.22)
         border.lineWidth = 1.5
         border.fillColor = .clear
         gridLayer.addChild(border)
@@ -280,8 +281,10 @@ final class OrbitScene: SKScene {
 
     // MARK: - Trail and rings
 
+    /// Blue normally, gold in astronaut mode, and full starlight in high contrast.
     private var trailColor: UIColor {
-        style.highContrast ? .white : SceneArt.trailColor
+        if style.highContrast { return Palette.starlight }
+        return rocket.isSuitedUp ? Palette.goldTrim : SceneArt.trailColor
     }
 
     private func makeSegmentNode(_ segment: TrailSegment) -> SKShapeNode {
@@ -372,14 +375,74 @@ final class OrbitScene: SKScene {
             playCrash(at: at, from: from, direction: direction, duration: duration)
         case .runtimeError:
             playConfused()
+        case .easterEgg(let egg):
+            playEasterEgg(egg)
         }
+    }
+
+    /// The stars twinkle faster while the rocket is moving, as if they're excited too.
+    private func twinkleFaster(for duration: TimeInterval) {
+        guard !style.reduceMotion else { return }
+        backdropLayer.speed = 2.5
+        backdropLayer.removeAction(forKey: "calm")
+        run(.sequence([.wait(forDuration: duration + 0.3), .run { [weak self] in self?.backdropLayer.speed = 1 }]), withKey: "calm")
+    }
+
+    // MARK: - Easter eggs
+
+    private func playEasterEgg(_ egg: EasterEgg) {
+        switch egg {
+        case .hello:
+            rocket.wave()
+        case .suitUp:
+            rocket.suitUp()
+            rebuildTrail()
+        case .stargaze:
+            drawBigDipper()
+        }
+        let shimmer = SceneArt.burst(colors: [Palette.goldTrim, Palette.starlight], count: style.reduceMotion ? 10 : 24,
+                                     speed: cellSize, lifetime: 0.9, size: cellSize * 0.22, texture: SceneArt.sparkle)
+        shimmer.position = rocket.position
+        effectLayer.addChild(shimmer)
+    }
+
+    /// Seven stars appear in the sky and join into the Big Dipper, then slowly fade away.
+    private func drawBigDipper() {
+        effectLayer.childNode(withName: "dipper")?.removeFromParent()
+        let dipper = SKNode()
+        dipper.name = "dipper"
+        // Star positions as fractions of the scene, roughly the shape of the real Big Dipper.
+        let stars: [CGPoint] = [(0.18, 0.80), (0.29, 0.83), (0.39, 0.80), (0.48, 0.74), (0.51, 0.62), (0.66, 0.60), (0.68, 0.73)]
+            .map { CGPoint(x: size.width * $0.0, y: size.height * $0.1) }
+        let path = CGMutablePath()
+        path.addLines(between: stars)
+        path.addLine(to: stars[3])
+        let lines = SKShapeNode(path: path)
+        lines.strokeColor = Palette.starlight.withAlphaComponent(0.45)
+        lines.lineWidth = 1.5
+        lines.lineJoin = .round
+        lines.alpha = 0
+        lines.run(.sequence([.wait(forDuration: Double(stars.count) * 0.15), .fadeIn(withDuration: 0.6)]))
+        dipper.addChild(lines)
+        for (index, position) in stars.enumerated() {
+            let star = SKSpriteNode(texture: SceneArt.sparkle)
+            star.size = CGSize(width: 22, height: 22)
+            star.color = Palette.goldTrim
+            star.colorBlendFactor = 1
+            star.position = position
+            star.setScale(0)
+            star.run(.sequence([.wait(forDuration: Double(index) * 0.15), .scale(to: 1, duration: 0.3)]))
+            dipper.addChild(star)
+        }
+        dipper.run(.sequence([.wait(forDuration: 7), .fadeOut(withDuration: 1.5), .removeFromParent()]))
+        effectLayer.addChild(dipper)
     }
 
     private func playLaunch(duration: TimeInterval) {
         rocket.enter(FlyingState.self)
         rocket.boost(for: duration * 0.7)
 
-        let smoke = SceneArt.burst(colors: [UIColor(white: 0.9, alpha: 1), UIColor(white: 0.5, alpha: 1)],
+        let smoke = SceneArt.burst(colors: [Palette.starlight, Palette.dusk.mixed(with: Palette.starlight, 0.4)],
                                    count: style.reduceMotion ? 30 : 90, speed: cellSize * 1.2, lifetime: 1.2, size: cellSize * 0.5)
         smoke.position = CGPoint(x: rocket.position.x, y: rocket.position.y - cellSize * 0.35)
         effectLayer.addChild(smoke)
@@ -402,6 +465,9 @@ final class OrbitScene: SKScene {
         rocket.removeAction(forKey: "move")
         rocket.run(.sequence([.rotate(toAngle: direction.angle, duration: duration * 0.2, shortestUnitArc: true), travel]), withKey: "move")
 
+        rocket.react(after: duration * 0.85)
+        twinkleFaster(for: duration)
+
         var segment = TrailSegment(from: from, to: to, line: line)
         let node = makeSegmentNode(segment)
         node.alpha = 0
@@ -414,9 +480,8 @@ final class OrbitScene: SKScene {
         heading = direction
         rocket.run(.rotate(toAngle: direction.angle, duration: duration * 0.15, shortestUnitArc: true))
 
-        let alert = style.colorBlind ? UIColor.orange : UIColor.systemRed
-        let clear = style.colorBlind ? UIColor.cyan : UIColor.systemGreen
-        let color = detected ? alert : clear
+        // Ember for "asteroid!" and blue for "all clear": a warm/cool pair that also reads well with color blindness.
+        let color = detected ? Palette.ember : Palette.nebulaBlue
 
         // A cone that widens from the rocket's nose across the square it's checking.
         let origin = point(for: rocketCell)
@@ -489,6 +554,7 @@ final class OrbitScene: SKScene {
 
         let approach = SKAction.move(to: impact, duration: duration * 0.3)
         approach.timingMode = .easeIn
+        rocket.stopIdling()
         rocket.run(.sequence([
             .rotate(toAngle: direction.angle, duration: duration * 0.12, shortestUnitArc: true),
             approach,
@@ -508,7 +574,7 @@ final class OrbitScene: SKScene {
         effectLayer.addChild(fire)
 
         // Debris: real physics bodies that tumble away and bounce off other asteroids.
-        let pieceColors = [UIColor.white, UIColor(red: 0.95, green: 0.3, blue: 0.3, alpha: 1), UIColor(red: 0.42, green: 0.38, blue: 0.36, alpha: 1)]
+        let pieceColors = [Palette.starlight, Palette.ember, SceneArt.stone]
         for index in 0..<(style.reduceMotion ? 6 : 14) {
             let size = cellSize * CGFloat.random(in: 0.05...0.11)
             let shard = UIBezierPath()
@@ -548,7 +614,7 @@ final class OrbitScene: SKScene {
         ]))
         guard let border = gridBorder else { return }
         let normal = border.strokeColor
-        border.strokeColor = .systemRed
+        border.strokeColor = Palette.ember
         border.run(.sequence([.wait(forDuration: 0.6), .run { [weak border] in border?.strokeColor = normal }]))
     }
 
@@ -557,6 +623,8 @@ final class OrbitScene: SKScene {
     /// Turns every point the rocket visited into a star, and the trail into constellation lines.
     func celebrate() {
         rocket.enter(DockedState.self)
+        rocket.stopIdling()
+        rocket.react(after: 0)
 
         var points: [GridPoint] = []
         if let first = trail.first { points.append(first.from) }
@@ -566,10 +634,11 @@ final class OrbitScene: SKScene {
         points = points.filter { seen.insert($0).inserted }
 
         for (index, cell) in points.enumerated() {
-            let star = SKLabelNode(text: "✦")
-            star.fontSize = cellSize * 0.42
-            star.fontColor = .white
-            star.verticalAlignmentMode = .center
+            let star = SKSpriteNode(texture: SceneArt.sparkle)
+            star.size = CGSize(width: cellSize * 0.42, height: cellSize * 0.42)
+            star.color = Palette.starlight
+            star.colorBlendFactor = 1
+            star.zRotation = CGFloat(index % 3) * 0.12 - 0.12
             star.position = point(for: cell)
             star.setScale(0)
             let appear = SKAction.scale(to: 1, duration: 0.25)
@@ -577,7 +646,7 @@ final class OrbitScene: SKScene {
             star.run(.sequence([.wait(forDuration: Double(index) * 0.06), appear]))
             effectLayer.addChild(star)
 
-            let halo = SceneArt.glow(color: SceneArt.guideGold, diameter: cellSize * 0.8, alpha: 0)
+            let halo = SceneArt.glow(color: Palette.goldTrim, diameter: cellSize * 0.8, alpha: 0)
             halo.position = star.position
             halo.run(.sequence([.wait(forDuration: Double(index) * 0.06), .fadeAlpha(to: 0.6, duration: 0.3)]))
             effectLayer.addChild(halo)
@@ -586,12 +655,13 @@ final class OrbitScene: SKScene {
         for segment in trail {
             guard let node = segment.node else { continue }
             node.run(.sequence([.wait(forDuration: Double(points.count) * 0.06), .run { [weak node] in
-                node?.strokeColor = UIColor(white: 1, alpha: 0.55)
+                node?.strokeColor = Palette.starlight.withAlphaComponent(0.55)
             }]))
         }
 
-        let sparkles = SceneArt.burst(colors: [SceneArt.guideGold, .white], count: style.reduceMotion ? 30 : 90,
-                                      speed: cellSize * 1.8, lifetime: 1.2, size: cellSize * 0.25)
+        // A burst of little stars, not confetti.
+        let sparkles = SceneArt.burst(colors: [Palette.starlight, Palette.goldTrim, Palette.goldTrim], count: style.reduceMotion ? 20 : 48,
+                                      speed: cellSize * 1.6, lifetime: 1.4, size: cellSize * 0.3, texture: SceneArt.sparkle)
         sparkles.position = rocket.position
         effectLayer.addChild(sparkles)
 
@@ -618,7 +688,7 @@ final class OrbitScene: SKScene {
         }
         let node = SKShapeNode(path: line.copy(dashingWithPhase: 0, lengths: [6, 6]))
         node.name = "hint"
-        node.strokeColor = SceneArt.guideGold.withAlphaComponent(0.85)
+        node.strokeColor = Palette.goldTrim.withAlphaComponent(0.85)
         node.lineWidth = 2.5
         node.lineCap = .round
         effectLayer.addChild(node)
@@ -650,19 +720,15 @@ final class OrbitScene: SKScene {
                 continue
             }
             if segment.line == line {
-                node.strokeColor = .systemYellow
+                node.strokeColor = Palette.goldTrim
                 node.alpha = 1
                 // Label each highlighted segment once, at its midpoint.
                 if labeled.insert(segment.to).inserted {
                     let start = point(for: segment.from), end = point(for: segment.to)
-                    let tag = SKLabelNode(text: "\(line)")
+                    let tag = SceneArt.label("\(line)", size: max(11, cellSize * 0.22), color: Palette.deepSpace)
                     tag.name = "lineTag"
-                    tag.fontName = "AvenirNext-Bold"
-                    tag.fontSize = max(11, cellSize * 0.24)
-                    tag.fontColor = .black
-                    tag.verticalAlignmentMode = .center
                     let badge = SKShapeNode(circleOfRadius: max(9, cellSize * 0.17))
-                    badge.fillColor = .systemYellow
+                    badge.fillColor = Palette.goldTrim
                     badge.strokeColor = .clear
                     badge.zPosition = -1
                     tag.addChild(badge)

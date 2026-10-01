@@ -10,31 +10,24 @@ import SwiftUI
 struct CommandBarView: View {
     let blocks: [Block]
     let isRunning: Bool
+    let isReady: Bool
     let onInsert: (String) -> Void
     let onRun: () -> Void
     let onStop: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Space.m) {
             BlockButtonsView(blocks: blocks, onInsert: onInsert)
                 .disabled(isRunning)
                 .opacity(isRunning ? 0.4 : 1)
+                .animation(.easeInOut(duration: 0.25), value: isRunning)
 
-            RunButtonView(isRunning: isRunning, onRun: onRun, onStop: onStop)
+            RunButtonView(isRunning: isRunning, isReady: isReady, onRun: onRun, onStop: onStop)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            Color.black.opacity(0.75),
-            in: RoundedRectangle(cornerRadius: 14)
-        )
-        .frame(alignment: .center)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+        .padding(.horizontal, Space.m)
+        .padding(.vertical, Space.xs)
+        .cozyPanel()
+        .padding(.horizontal, Space.m)
+        .padding(.bottom, Space.m)
     }
 }

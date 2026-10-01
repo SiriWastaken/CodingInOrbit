@@ -24,6 +24,7 @@ struct StepEvent: Equatable, Sendable {
         case loopIterationEnded(iteration: Int, total: Int, path: [GridPoint])
         case crashed(at: GridPoint, from: GridPoint, direction: Direction)
         case runtimeError(CodeError)
+        case easterEgg(EasterEgg)
 
         /// How long this step takes compared to a single move.
         var pace: Double {
@@ -35,6 +36,7 @@ struct StepEvent: Equatable, Sendable {
             case .loopIterationEnded: 0.5
             case .crashed: 1.6
             case .runtimeError: 1.0
+            case .easterEgg: 1.2
             }
         }
     }
@@ -49,6 +51,7 @@ struct StepEvent: Equatable, Sendable {
         case .loopIterationEnded: "Round complete."
         case .crashed: "Line \(line): crashed into an asteroid."
         case .runtimeError(let error): "Line \(line): \(error.message)"
+        case .easterEgg: "Line \(line): a little surprise."
         }
     }
 }
@@ -102,7 +105,7 @@ struct Interpreter {
         switch statement {
         case .launch(let line):
             guard !world.isLaunched else {
-                halt(CodeError(line: line, "The rocket is already flying!", hint: "launch() only works on the launch pad. Try removing this line."))
+                halt(CodeError(line: line, "We're already up here!", hint: "launch() only works from the pad. Try removing this line."))
                 return
             }
             world.isLaunched = true
@@ -111,14 +114,14 @@ struct Interpreter {
 
         case .move(let direction, let line):
             guard world.isLaunched else {
-                halt(CodeError(line: line, "The rocket is still on the launch pad.", hint: "Add launch() before your first move."))
+                halt(CodeError(line: line, "The rocket's still on the launch pad.", hint: "Every flight starts with launch(). Try putting it first."))
                 return
             }
             let from = world.rocket
             let to = from.moved(direction)
             world.heading = direction
             guard world.contains(to) else {
-                halt(CodeError(line: line, "Moving \(direction.rawValue) would fly out of the mission area.", hint: "Watch the edges. Try a different direction here."))
+                halt(CodeError(line: line, "Whoa, that's the edge of the map!", hint: "Even explorers need boundaries. Try a different direction here."))
                 return
             }
             if world.asteroids.contains(to) {
@@ -146,13 +149,16 @@ struct Interpreter {
             let reading = world.sense(condition)
             emit(line, .sensed(condition, direction: world.heading, target: reading.target, result: reading.result))
             execute(reading.result ? then : (otherwise ?? []))
+
+        case .easterEgg(let egg, let line):
+            emit(line, .easterEgg(egg))
         }
     }
 
     private mutating func countStep(line: Int) -> Bool {
         steps += 1
         guard steps <= Self.stepLimit else {
-            halt(CodeError(line: line, "Your code ran more than \(Self.stepLimit) steps, so I stopped it.", hint: "Check your repeat numbers. The rocket needs far fewer steps than that."))
+            halt(CodeError(line: line, "That's a lot of looping! I got dizzy after \(Self.stepLimit) steps and stopped.", hint: "Check your repeat numbers. The rocket needs far fewer steps than that."))
             return false
         }
         return true

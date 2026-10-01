@@ -24,10 +24,9 @@ class AccessibilityManager: ObservableObject {
     
     @Published var isVoiceOverRunning = false
     
+    /// The observatory is always at night. High contrast brightens lines and text within the dark palette instead.
     var effectiveColorScheme: ColorScheme? {
-        if isDarkMode { return .dark }
-        if isHighContrast { return .light }
-        return nil
+        .dark
     }
     
     init() {

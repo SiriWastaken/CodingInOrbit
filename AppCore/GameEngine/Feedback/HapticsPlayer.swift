@@ -12,7 +12,7 @@ import CoreHaptics
 // (Most iPads don't have a haptic engine, so this quietly does nothing there.)
 
 enum HapticCue {
-    case launch, move, sense, loop, crash, success, error
+    case launch, move, sense, loop, crash, success, error, pop, select
 }
 
 @MainActor
@@ -59,7 +59,11 @@ final class HapticsPlayer {
              transient(at: 0.24, intensity: 0.9, sharpness: 0.7),
              continuous(at: 0.3, duration: 0.35, intensity: 0.4, sharpness: 0.3)]
         case .error:
-            [transient(at: 0, intensity: 0.6, sharpness: 0.1), transient(at: 0.15, intensity: 0.6, sharpness: 0.1)]
+            [transient(at: 0, intensity: 0.45, sharpness: 0.1), transient(at: 0.16, intensity: 0.35, sharpness: 0.1)]
+        case .pop:
+            [transient(at: 0, intensity: 0.5, sharpness: 0.8)]
+        case .select:
+            [transient(at: 0, intensity: 0.35, sharpness: 0.5)]
         }
     }
 

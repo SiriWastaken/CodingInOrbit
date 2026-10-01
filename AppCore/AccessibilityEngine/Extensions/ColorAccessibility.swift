@@ -7,33 +7,23 @@
 
 import SwiftUI
 
+// Accessibility-aware colors, all drawn from the app's palette (see Theme.swift).
+
 @MainActor
 extension Color {
     static func adaptiveText(_ manager: AccessibilityManager) -> Color {
-        if manager.isHighContrast {
-            return .white
-        }
-        return manager.isDarkMode ? .white : .primary
+        manager.isHighContrast ? .starlight : .starlight.opacity(0.85)
     }
-    
+
     static func adaptiveBackground(_ manager: AccessibilityManager) -> Color {
-        if manager.isHighContrast {
-            return .black
-        }
-        return manager.isDarkMode ? Color(red: 0.05, green: 0.05, blue: 0.10) : Color(.systemBackground)
+        manager.isHighContrast ? .deepSpace : .dusk
     }
-    
+
     static func adaptiveAccent(_ manager: AccessibilityManager) -> Color {
-        if manager.isColorBlindMode {
-            return Color.blue
-        }
-        return Color(red: 0.2, green: 0.4, blue: 0.9)
+        manager.isColorBlindMode ? .nebulaBlue : .goldTrim
     }
-    
+
     static func adaptiveSecondary(_ manager: AccessibilityManager) -> Color {
-        if manager.isColorBlindMode {
-            return Color.gray
-        }
-        return Color(red: 0.6, green: 0.2, blue: 0.8)
+        manager.isColorBlindMode ? .starlight.opacity(0.6) : .ember
     }
 }

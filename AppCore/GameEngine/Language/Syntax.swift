@@ -42,6 +42,11 @@ enum Direction: String, CaseIterable, Sendable {
     }
 }
 
+/// Secret commands. They don't move the rocket, they just make something nice happen.
+enum EasterEgg: String, Sendable {
+    case hello, suitUp, stargaze
+}
+
 /// A sensor the rocket can check with `if`.
 enum Condition: String, CaseIterable, Sendable {
     case asteroidAhead
@@ -52,17 +57,24 @@ indirect enum Statement: Equatable, Sendable {
     case move(Direction, line: Int)
     case repeatLoop(count: Int, body: [Statement], line: Int)
     case ifElse(Condition, then: [Statement], otherwise: [Statement]?, line: Int)
+    case easterEgg(EasterEgg, line: Int)
 
     var line: Int {
         switch self {
-        case .launch(let line), .move(_, let line), .repeatLoop(_, _, let line), .ifElse(_, _, _, let line):
+        case .launch(let line), .move(_, let line), .repeatLoop(_, _, let line), .ifElse(_, _, _, let line), .easterEgg(_, let line):
             line
         }
     }
 
-    /// How many commands this statement contains, counting itself.
+    var isEasterEgg: Bool {
+        if case .easterEgg = self { true } else { false }
+    }
+
+    /// How many commands this statement contains, counting itself. Easter eggs don't count.
     var commandCount: Int {
         switch self {
+        case .easterEgg:
+            0
         case .launch, .move:
             1
         case .repeatLoop(_, let body, _):
@@ -74,7 +86,7 @@ indirect enum Statement: Equatable, Sendable {
 
     var usesRepeat: Bool {
         switch self {
-        case .launch, .move: false
+        case .launch, .move, .easterEgg: false
         case .repeatLoop: true
         case .ifElse(_, let then, let otherwise, _): then.usesRepeat || (otherwise?.usesRepeat ?? false)
         }
@@ -82,7 +94,7 @@ indirect enum Statement: Equatable, Sendable {
 
     var usesIf: Bool {
         switch self {
-        case .launch, .move: false
+        case .launch, .move, .easterEgg: false
         case .repeatLoop(_, let body, _): body.usesIf
         case .ifElse: true
         }

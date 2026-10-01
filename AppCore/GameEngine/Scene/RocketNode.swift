@@ -32,17 +32,27 @@ enum FlameLevel {
 }
 
 final class RocketNode: SKNode {
+    /// Holds the drawing, flame, and helmet. The node itself turns to face the heading,
+    /// while this inner layer is free to wiggle, hop, and squash.
+    private let art = SKNode()
     private let flame = SceneArt.exhaust()
+    private let halo = SceneArt.glow(color: Palette.goldTrim, diameter: 120, alpha: 0)
+    private var helmet: SKNode?
     private var stateMachine: GKStateMachine?
+    private var reduceMotion = false
 
     var currentState: GKState? { stateMachine?.currentState }
+    var isSuitedUp: Bool { helmet != nil }
 
     override init() {
         super.init()
+        halo.zPosition = -2
+        addChild(halo)
         flame.position = CGPoint(x: 0, y: -44)
         flame.zPosition = -1
-        addChild(flame)
-        addChild(SceneArt.rocket())
+        art.addChild(flame)
+        art.addChild(SceneArt.rocket())
+        addChild(art)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -50,8 +60,13 @@ final class RocketNode: SKNode {
     }
 
     /// Puts the rocket back at the start of a mission with a fresh state machine.
-    func reset(launched: Bool) {
+    func reset(launched: Bool, reduceMotion: Bool) {
+        self.reduceMotion = reduceMotion
         removeAllActions()
+        art.removeAllActions()
+        art.position = .zero
+        art.zRotation = 0
+        art.setScale(1)
         isHidden = false
         alpha = 1
         zRotation = 0
@@ -60,6 +75,7 @@ final class RocketNode: SKNode {
         ])
         stateMachine = machine
         machine.enter(launched ? FlyingState.self : OnPadState.self)
+        startIdling()
     }
 
     @discardableResult
@@ -83,6 +99,70 @@ final class RocketNode: SKNode {
             .wait(forDuration: duration),
             .run { [weak self] in self?.setFlame(.cruise) }
         ]), withKey: "boost")
+    }
+
+    // MARK: Personality
+
+    /// While waiting, the rocket sways and bobs a little, like it's humming to itself.
+    func startIdling() {
+        art.removeAction(forKey: "idle")
+        guard !reduceMotion else { return }
+        let sway = SKAction.sequence([
+            .rotate(toAngle: 0.06, duration: 1.1),
+            .rotate(toAngle: -0.05, duration: 1.3),
+            .rotate(toAngle: 0, duration: 0.9),
+            .wait(forDuration: 1.6)
+        ])
+        sway.timingMode = .easeInEaseOut
+        let bob = SKAction.sequence([.moveBy(x: 0, y: 4, duration: 1.4), .moveBy(x: 0, y: -4, duration: 1.4)])
+        bob.timingMode = .easeInEaseOut
+        art.run(.repeatForever(.group([sway, bob])), withKey: "idle")
+    }
+
+    func stopIdling() {
+        art.removeAction(forKey: "idle")
+        art.run(.group([.rotate(toAngle: 0, duration: 0.15), .move(to: .zero, duration: 0.15)]))
+    }
+
+    /// A happy little hop and a warm glow after a command works.
+    func react(after delay: TimeInterval) {
+        let glowUp = SKAction.sequence([.wait(forDuration: delay), .fadeAlpha(to: 0.55, duration: 0.08), .fadeAlpha(to: 0, duration: 0.45)])
+        halo.run(glowUp, withKey: "react")
+        guard !reduceMotion else { return }
+        let squash = SKAction.scaleX(to: 1.12, y: 0.9, duration: 0.07)
+        let stretch = SKAction.scaleX(to: 0.94, y: 1.1, duration: 0.09)
+        let settle = SKAction.scale(to: 1, duration: 0.16)
+        settle.timingMode = .easeOut
+        art.run(.sequence([.wait(forDuration: delay), squash, stretch, settle]), withKey: "react")
+    }
+
+    /// A wave hello: a happy spin with a little hop.
+    func wave() {
+        guard !reduceMotion else {
+            react(after: 0)
+            return
+        }
+        let hop = SKAction.sequence([.moveBy(x: 0, y: 18, duration: 0.18), .moveBy(x: 0, y: -18, duration: 0.22)])
+        hop.timingMode = .easeInEaseOut
+        art.run(.group([hop, .sequence([.rotate(byAngle: 0.35, duration: 0.12), .rotate(byAngle: -0.7, duration: 0.18), .rotate(byAngle: 0.35, duration: 0.12)])]))
+        react(after: 0.1)
+    }
+
+    /// Astronaut mode: a helmet with a blinking antenna pops on.
+    func suitUp() {
+        guard helmet == nil else {
+            wave()
+            return
+        }
+        let newHelmet = SceneArt.helmet()
+        newHelmet.setScale(0.1)
+        newHelmet.zPosition = 1
+        let pop = SKAction.scale(to: 1.15, duration: 0.18)
+        pop.timingMode = .easeOut
+        newHelmet.run(.sequence([pop, .scale(to: 1, duration: 0.12)]))
+        art.addChild(newHelmet)
+        helmet = newHelmet
+        react(after: 0.2)
     }
 }
 
