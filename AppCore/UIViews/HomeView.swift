@@ -9,125 +9,97 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject var accessibilityManager = AccessibilityManager()
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
-                Image("SplashScreen")
-                    .resizable()
-                    .scaledToFill()
-                    .ignoresSafeArea()
-                    .overlay(
-                        LinearGradient(
-                            colors: [
-                                Color.black.opacity(0.6),
-                                Color.clear,
-                                Color.black.opacity(0.4)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                
-                ForEach(0..<30) { _ in
-                    Circle()
-                        .fill(Color.white.opacity(Double.random(in: 0.1...0.4)))
-                        .frame(width: CGFloat.random(in: 1...3))
-                        .position(
-                            x: CGFloat.random(in: 0...UIScreen.main.bounds.width),
-                            y: CGFloat.random(in: 0...UIScreen.main.bounds.height)
-                        )
-                }
-                
-                VStack(spacing: 24) {
+                CozyBackground(starCount: 90, splashOpacity: 0.2)
+
+                VStack(spacing: Space.xl) {
                     Spacer()
-                    
-                    VStack(spacing: 4) {
-                        Text("CODING IN")
-                            .font(.system(size: 32, weight: .light, design: .serif))
-                            .kerning(6)
-                            .foregroundColor(.white.opacity(0.7))
-                        
-                        Text("ORBIT")
-                            .font(.system(size: 56, weight: .bold, design: .serif))
-                            .kerning(8)
-                            .foregroundColor(.white)
-                            .shadow(color: .blue.opacity(0.3), radius: 20, x: 0, y: 0)
+
+                    FloatingRocket()
+                        .frame(width: 120, height: 120)
+                        .arrive()
+
+                    VStack(spacing: Space.xs) {
+                        Text("Coding in")
+                            .font(Typeface.title)
+                            .foregroundStyle(Color.starlight.opacity(0.7))
+                        Text("Orbit")
+                            .font(Typeface.largeTitle)
+                            .foregroundStyle(Color.starlight)
+                            .shadow(color: Color.goldTrim.opacity(0.35), radius: Space.l)
                     }
-                    
-                    Text("Learn coding by exploring the unknown!")
-                        .font(.subheadline)
-                        .fontWeight(.light)
-                        .kerning(2)
-                        .foregroundColor(.white.opacity(0.5))
-                        .padding(.bottom, 20)
-                    
-                    NavigationLink(destination: InitGameView()
-                        .environmentObject(accessibilityManager)
-                    ) {
-                        Text("LIFTOFF")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .tracking(2)
-                            .frame(width: 220, height: 56)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.black, Color.blue],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .foregroundColor(.white)
-                            .cornerRadius(16)
-                            .shadow(color: .blue.opacity(0.4), radius: 15, x: 0, y: 6)
+                    .accessibilityElement(children: .combine)
+                    .arrive(delay: 0.08)
+
+                    Text("Build it. Watch it fly. Understand it.")
+                        .font(Typeface.body)
+                        .foregroundStyle(Color.starlight.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .arrive(delay: 0.14)
+
+                    VStack(spacing: Space.m) {
+                        NavigationLink {
+                            InitGameView()
+                        } label: {
+                            Label("Liftoff", systemImage: "flame.fill")
+                                .frame(minWidth: 200)
+                                .padding(.vertical, Space.xs)
+                        }
+                        .buttonStyle(BouncyButtonStyle(kind: .primary))
+
+                        NavigationLink {
+                            OptionsView()
+                        } label: {
+                            Text("Options").frame(minWidth: 200)
+                        }
+                        .buttonStyle(BouncyButtonStyle(kind: .secondary))
+
+                        NavigationLink {
+                            CreditsView()
+                        } label: {
+                            Text("Credits").frame(minWidth: 200)
+                        }
+                        .buttonStyle(BouncyButtonStyle(kind: .secondary))
                     }
-                    .applyAccessibility(accessibilityManager)
-                    
-                    NavigationLink(destination: OptionsView()
-                        .environmentObject(accessibilityManager)
-                    ) {
-                        Text("OPTIONS")
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .tracking(2)
-                            .frame(width: 220, height: 48)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundColor(.white)
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                            )
-                    }
-                    .applyAccessibility(accessibilityManager)
-                    
-                    NavigationLink(destination: CreditsView()
-                        .environmentObject(accessibilityManager)
-                    ) {
-                        Text("CREDITS")
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .tracking(2)
-                            .frame(width: 220, height: 48)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundColor(.white)
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                            )
-                    }
-                    .applyAccessibility(accessibilityManager)
-                    
+                    .padding(.top, Space.l)
+                    .arrive(delay: 0.22)
+
                     Spacer()
-                    
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, Space.xxl)
             }
-            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .environmentObject(accessibilityManager)
         .applyAccessibility(accessibilityManager)
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// The home screen's little doodled rocket, bobbing on a sketchy orbit with its flame flickering.
+private struct FloatingRocket: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
+            let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            ZStack {
+                OrbitGlyph()
+                    .stroke(Color.goldTrim.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .scaleEffect(1.5)
+                    .rotationEffect(.degrees(-12))
+                RocketGlyph()
+                    .stroke(Color.starlight, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .background(RocketGlyph().fill(Color.ember.opacity(0.35)))
+                    .shadow(color: Color.goldTrim.opacity(0.4 + 0.2 * sin(time * 9)), radius: Space.s)
+                    .rotationEffect(.degrees(8 + 3 * sin(time * 0.8)))
+                    .offset(y: sin(time * 1.2) * Double(Space.s))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
