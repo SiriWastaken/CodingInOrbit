@@ -83,8 +83,17 @@ final class RocketNode: SKNode {
         stateMachine?.enter(state) ?? false
     }
 
-    func configure(cellSize: CGFloat) {
-        setScale(cellSize * 0.6 / 100)
+    /// The rocket art is about 100 points tall; this scales it to the height it should be on screen.
+    static func scale(forHeight height: CGFloat) -> CGFloat { height / 100 }
+
+    func configure(height: CGFloat) {
+        setScale(Self.scale(forHeight: height))
+    }
+
+    /// Settles onto the ground with the engine off.
+    func land() {
+        enter(DockedState.self)
+        stopIdling()
     }
 
     func setFlame(_ level: FlameLevel) {

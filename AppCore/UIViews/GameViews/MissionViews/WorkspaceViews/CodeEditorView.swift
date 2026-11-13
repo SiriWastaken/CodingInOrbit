@@ -482,10 +482,11 @@ struct SyntaxHighlighter {
     }
 
     private let rules: [(NSRegularExpression, UIColor)] = [
-        ("\\b(repeat|if|else)\\b", Palette.goldTrim),
-        ("\\b(launch|move)\\b", Palette.nebulaBlue),
+        ("\\b(repeat|if|else|not)\\b", Palette.goldTrim),
+        ("\\b(create|build|spawn|summon)\\b", Palette.nebulaBlue),
+        ("\\b(launch|orbit|explore|move)\\b", Palette.ember.mixed(with: Palette.starlight, 0.15)),
         ("\\b(up|down|left|right)\\b", Palette.ember),
-        ("\\basteroidAhead\\b", Palette.goldTrim.mixed(with: Palette.starlight, 0.4)),
+        ("\\b(launchpad|rocket|star|planet|moon|satellite|asteroid|comet|rover|base)\\b", Palette.goldTrim.mixed(with: Palette.starlight, 0.4)),
         ("\\b(suitUp|stargaze|hello|hi)\\b", Palette.goldTrim.mixed(with: Palette.ember, 0.4)),
         ("\\b\\d+\\b", Palette.nebulaBlue.mixed(with: Palette.starlight, 0.4)),
         ("//.*", Palette.starlight.withAlphaComponent(0.4))

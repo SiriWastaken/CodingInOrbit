@@ -8,10 +8,11 @@
 import Foundation
 import GameplayKit
 
-// Each mission teaches one idea, and its world is built so that idea is the natural way to win:
-// 1. Liftoff: sequencing. The order of the lines decides the flight.
-// 2. Low Earth Orbit: loops. A loop comes back around, just like an orbit.
-// 3. To The Moon: conditionals. The asteroids move every run, so the rocket has to check.
+// Each mission is a chapter in building a universe, and each one hides an idea that the
+// code needs before it will work:
+// 1. Liftoff: sequencing. A launchpad, then a rocket, then launch. Order changes the result.
+// 2. Low Earth Orbit: loops. A ring of satellites is one line said five times.
+// 3. To The Moon: conditionals. The Moon is sometimes already there, so the code has to look first.
 
 enum MissionID: String, CaseIterable, Sendable {
     case liftoff, lowEarthOrbit, toTheMoon
@@ -27,6 +28,22 @@ struct MissionResult: Equatable, Sendable {
     var line: Int?
 }
 
+/// One thing the universe needs before the mission is done. Goals fill in as the world grows.
+struct Goal: Identifiable, Sendable {
+    let id: String
+    let title: String
+    let icon: String
+    /// Bonus goals are extras for the curious. They never block the win.
+    var isBonus = false
+    /// What the Guiding Light says when this is the next thing missing.
+    let nudge: String
+    /// Said when the code finished but this still wasn't true.
+    let missing: String
+    /// A thing to draw as a ghost when hinting at this goal.
+    var ghost: Thing?
+    let isMet: @Sendable (World) -> Bool
+}
+
 struct Mission: Identifiable, Hashable, Sendable {
     let id: MissionID
     let number: Int
@@ -34,10 +51,11 @@ struct Mission: Identifiable, Hashable, Sendable {
     let concept: String
     let icon: String
     let summary: String
+    let stage: Stage
     let briefing: [String]
     let starterCode: String
     let blocks: [BlockKind]
-    let hint: String
+    let goals: [Goal]
 
     static func == (lhs: Mission, rhs: Mission) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -45,6 +63,9 @@ struct Mission: Identifiable, Hashable, Sendable {
     var next: Mission? {
         Mission.all.first { $0.number == number + 1 }
     }
+
+    var coreGoals: [Goal] { goals.filter { !$0.isBonus } }
+    var bonusGoals: [Goal] { goals.filter(\.isBonus) }
 }
 
 // MARK: - The three missions
@@ -52,27 +73,43 @@ struct Mission: Identifiable, Hashable, Sendable {
 extension Mission {
     static let all: [Mission] = [.liftoff, .lowEarthOrbit, .toTheMoon]
 
+    static let requiredSatellites = 5
+    static let stressTestUniverses = 10
+
     static let liftoff = Mission(
         id: .liftoff,
         number: 1,
         title: "Liftoff",
         concept: "Sequencing",
         icon: "flame.fill",
-        summary: "Hop, hop, hop to the space station, one line at a time.",
+        summary: "Make a launchpad, then a rocket, then watch it go.",
+        stage: .launchSite,
         briefing: [
-            "Oh, hello there! I'm the Guiding Light. I've been watching these stars for a very long time, and I'd love some company.",
-            "Here's a secret: your rocket does exactly what you write. One line at a time, top to bottom. No more, no less.",
-            "See that little space station? Let's fly there. Add a few moves, press Run, and watch what happens."
+            "Oh, hello! Welcome. It's awfully quiet out here. There's nothing at all, just you, me, and the dark.",
+            "Here's the odd part: I think the words you type don't just move things. They make them. Try create(launchpad) and press Run. I honestly don't know what we'll get.",
+            "If one line can make a launchpad, maybe another can make a rocket. And maybe something up here knows what launch() means. Shall we find out together?"
         ],
         starterCode: """
-        // Your code runs from top to bottom, one line at a time.
-        // Fly to the space station!
-        launch()
-        move(up)
+        // Nothing exists yet. Words make things.
+        // What happens when you run this?
+        create(launchpad)
 
         """,
-        blocks: [.launch, .move],
-        hint: "Follow my dotted line and count the squares. How many hops up? How many to the right? One line of code for each hop."
+        blocks: [.create, .launch],
+        goals: [
+            Goal(id: "pad", title: "Launchpad", icon: Thing.launchpad.icon,
+                 nudge: "I'd start by giving the rocket somewhere to stand. See the ghost? Try create(launchpad).",
+                 missing: "There's no launchpad yet. Rockets like having something to stand on.",
+                 ghost: .launchpad, isMet: { $0.has(.launchpad) }),
+            Goal(id: "rocket", title: "Rocket", icon: Thing.rocket.icon,
+                 nudge: "A launchpad with nothing on it is lonely. What if we made a rocket too? Try create(rocket).",
+                 missing: "The pad's ready, but there's no rocket to go with it.",
+                 ghost: .rocket, isMet: { $0.has(.rocket) }),
+            Goal(id: "liftoff", title: "Liftoff", icon: "flame.fill",
+                 nudge: "The rocket's just sitting there, waiting. What do you think makes it go? I'd try launch().",
+                 missing: "The rocket's still on the pad, waiting for its big moment.",
+                 isMet: { $0.rockets.contains(where: \.isFlying) })
+        ]
     )
 
     static let lowEarthOrbit = Mission(
@@ -81,23 +118,44 @@ extension Mission {
         title: "Low Earth Orbit",
         concept: "Loops",
         icon: "arrow.triangle.2.circlepath",
-        summary: "Circle Earth 3 times, without writing the same thing 3 times.",
+        summary: "Fill empty space with a planet, a moon, and a ring of satellites.",
+        stage: .orbit,
         briefing: [
-            "Up here, going around and around is how you stay in space. Funny, isn't it?",
-            "Those 4 moves take the rocket around Earth once. But Earth would love 3 visits.",
-            "You could copy the lines 3 times... or you could find a way to say \"again.\" Hmm."
+            "Look how far we've come! Your rocket's up here now, but there's nothing for it to circle. I wonder what one line could do about that.",
+            "A word made a launchpad. What if we ask for a planet? A moon? Something small and quick, like a satellite? I wonder if they need each other.",
+            "Hmm, and if we want five satellites, typing the same line five times sounds tiring. Is there a way to say \"again\"?"
         ],
         starterCode: """
-        // One trip around Earth takes 4 moves.
-        // Can you make the rocket orbit 3 times?
-        move(right)
-        move(down)
-        move(left)
-        move(up)
+        // The rocket from Liftoff is waiting up here.
+        // Every orbit needs something to circle...
+        create(planet)
 
         """,
-        blocks: [.move, .repeatLoop],
-        hint: "Try tucking your 4 moves inside repeat 3 { }. Whatever's between the braces happens again, and again, and again."
+        blocks: [.create, .spawn, .summon, .orbit, .repeatLoop],
+        goals: [
+            Goal(id: "planet", title: "Planet", icon: Thing.planet.icon,
+                 nudge: "Everything out here is so empty. A planet would give things something to circle. Try create(planet).",
+                 missing: "There's no planet yet, so there's nothing to circle.",
+                 ghost: .planet, isMet: { $0.has(.planet) }),
+            Goal(id: "moon", title: "Moon", icon: Thing.moon.icon,
+                 nudge: "Planets love company. Try create(moon) and let's see where it goes.",
+                 missing: "Your planet is missing its moon.",
+                 ghost: .moon, isMet: { $0.has(.moon) }),
+            Goal(id: "satellites", title: "Satellites ×\(requiredSatellites)", icon: Thing.satellite.icon,
+                 nudge: "A ring of \(requiredSatellites) satellites! You could write create(satellite) five times... or is there a way to say \"again\"?",
+                 missing: "I count \(requiredSatellites) satellites needed, and not quite that many up there yet.",
+                 ghost: .satellite, isMet: { $0.count(of: .satellite) >= requiredSatellites }),
+            Goal(id: "orbit", title: "Orbit", icon: "arrow.triangle.2.circlepath",
+                 nudge: "Your rocket's been so patient. What do you think orbit() does? Let's find out.",
+                 missing: "The rocket's still drifting. It hasn't found anything to orbit yet.",
+                 isMet: { world in world.rockets.contains { if case .orbiting = $0.flight { true } else { false } } }),
+            Goal(id: "star", title: "A star", icon: Thing.star.icon, isBonus: true,
+                 nudge: "Something's missing from the middle of all this. Maybe a star?",
+                 missing: "", ghost: .star, isMet: { $0.has(.star) }),
+            Goal(id: "planets", title: "Three planets", icon: "globe.europe.africa.fill", isBonus: true,
+                 nudge: "Room for more planets? I'd love to see how many fit.",
+                 missing: "", ghost: .planet, isMet: { $0.count(of: .planet) >= 3 })
+        ]
     )
 
     static let toTheMoon = Mission(
@@ -106,206 +164,178 @@ extension Mission {
         title: "To The Moon",
         concept: "Conditionals",
         icon: "moon.stars.fill",
-        summary: "Cross an asteroid field that rearranges itself every flight.",
+        summary: "Build a moon base that works in any universe.",
+        stage: .moon,
         briefing: [
-            "The Moon! Isn't she lovely tonight? There's just one problem: these asteroids never sit still.",
-            "Every time you fly, they'll be somewhere new. So we can't plan every move ahead of time.",
-            "But your rocket has a sensor called asteroidAhead. What if it could look before it leaps?"
+            "The Moon! Isn't she lovely tonight? Let's make her... hmm, wait. Sometimes she's already here when we arrive. The universe doesn't always start the same way.",
+            "A rover and a base should be easy now. But I wonder what happens if we create a moon that's already there. Should we find out?",
+            "What if the code could look around first, and decide for itself? There's something called if... and I think not might be in on it."
         ],
         starterCode: """
-        // The asteroids move every time you run your code!
-        // Use a sensor so the rocket can decide for itself.
-        launch()
-        repeat 7 {
-            move(up)
-        }
+        // The Moon comes and goes. Some universes
+        // start with her, and some don't.
+        create(moon)
 
         """,
-        blocks: [.launch, .move, .repeatLoop, .condition],
-        hint: "Inside your repeat, just before move(up), ask the rocket to check: if asteroidAhead { move(right) }. It'll look every single time."
+        blocks: [.create, .build, .spawn, .summon, .explore, .repeatLoop, .condition],
+        goals: [
+            Goal(id: "moon", title: "Moon", icon: Thing.moon.icon,
+                 nudge: "Where's the Moon? Maybe create(moon) will bring her. Unless she's already here...",
+                 missing: "There's still no moon down there.",
+                 ghost: .moon, isMet: { $0.has(.moon) }),
+            Goal(id: "rover", title: "Rover", icon: Thing.rover.icon,
+                 nudge: "A moon without a rover is just a rock. Try spawn(rover).",
+                 missing: "There's no rover to explore with.",
+                 ghost: .rover, isMet: { $0.has(.rover) }),
+            Goal(id: "base", title: "Base", icon: Thing.base.icon,
+                 nudge: "The rover needs somewhere to go. How about build(base)?",
+                 missing: "There's nothing for the rover to find. No base yet.",
+                 ghost: .base, isMet: { $0.has(.base) }),
+            Goal(id: "explore", title: "Explore", icon: "binoculars.fill",
+                 nudge: "Everything's ready. What do you think explore() does? I'm curious too.",
+                 missing: "Everything's built, but nobody's explored yet. Try explore().",
+                 isMet: { world in world.bodies.contains { $0.thing == .rover && $0.explored } })
+        ]
     )
 }
 
-// MARK: - Worlds
+// MARK: - Starting universes
 
 extension Mission {
-    /// Builds this mission's world. Only To The Moon uses the seed: its asteroids move every run.
-    func makeWorld(seed: UInt64) -> World {
-        switch id {
-        case .liftoff:
-            World(width: 6, height: 6, rocket: GridPoint(x: 1, y: 5), isLaunched: false,
-                  launchPad: GridPoint(x: 1, y: 5), station: GridPoint(x: 3, y: 2),
-                  // The asteroid at (3, 4) means flying right first crashes: the order matters.
-                  asteroids: [GridPoint(x: 3, y: 4), GridPoint(x: 0, y: 1), GridPoint(x: 5, y: 3)])
-        case .lowEarthOrbit:
-            World(width: 6, height: 6, rocket: GridPoint(x: 2, y: 2), isLaunched: true,
-                  planetVertex: GridPoint(x: 3, y: 3),
-                  asteroids: [GridPoint(x: 0, y: 5), GridPoint(x: 5, y: 0)])
-        case .toTheMoon:
-            Self.asteroidField(seed: seed)
-        }
-    }
-
-    /// Makes an asteroid field that a rocket with a sensor can always cross. It "flies" the
-    /// sensor strategy while placing asteroids, so every field is fair, while code that only
-    /// memorizes one field will eventually crash.
-    private static func asteroidField(seed: UInt64) -> World {
+    /// Builds this mission's starting universe. Only To The Moon uses the seed: the Moon is
+    /// sometimes already there. `gentle` makes the first run start empty, as the briefing says.
+    func makeWorld(seed: UInt64, gentle: Bool = false) -> World {
+        var world = World(stage: stage)
         let random = GKMersenneTwisterRandomSource(seed: seed)
-        let width = 7, height = 8
-        let pad = GridPoint(x: 1, y: height - 1)
-
-        var asteroids: Set<GridPoint> = []
-        var path: Set<GridPoint> = []
-        for _ in 0..<20 where asteroids.count < 2 {
-            asteroids = []
-            path = [pad]
-            var column = pad.x
-            for row in stride(from: height - 2, through: 1, by: -1) {
-                // The rocket is at (column, row + 1) and its sensor checks (column, row).
-                if column + 1 < width && random.nextUniform() < 0.5 {
-                    asteroids.insert(GridPoint(x: column, y: row))
-                    column += 1
-                    path.insert(GridPoint(x: column, y: row + 1))
-                }
-                path.insert(GridPoint(x: column, y: row))
-            }
-            path.insert(GridPoint(x: column, y: 0))
-        }
-
-        // Extra asteroids off the safe path make the field look wild without making it unfair.
-        var decoys = 0
-        for _ in 0..<40 where decoys < 5 {
-            let point = GridPoint(x: random.nextInt(upperBound: width), y: 1 + random.nextInt(upperBound: height - 2))
-            if !path.contains(point) && !asteroids.contains(point) {
-                asteroids.insert(point)
-                decoys += 1
-            }
-        }
-
-        return World(width: width, height: height, rocket: pad, isLaunched: false,
-                     launchPad: pad, moonRow: 0, asteroids: asteroids)
-    }
-
-    func hintPath(in world: World) -> [GridPoint] {
         switch id {
         case .liftoff:
-            world.station.map { world.shortestPath(to: [$0]) } ?? []
+            break
         case .lowEarthOrbit:
-            [GridPoint(x: 2, y: 2), GridPoint(x: 3, y: 2), GridPoint(x: 3, y: 3), GridPoint(x: 2, y: 3), GridPoint(x: 2, y: 2)]
+            // The rocket from Liftoff, already up here.
+            _ = try? world.make(.rocket, verb: .create, line: 0)
         case .toTheMoon:
-            world.shortestPath(to: (0..<world.width).map { GridPoint(x: $0, y: 0) })
+            _ = try? world.make(.rocket, verb: .create, line: 0)
+            if !gentle && random.nextBool() { _ = try? world.make(.moon, verb: .create, line: 0) }
+            if !gentle && random.nextBool() { _ = try? world.make(.asteroid, verb: .create, line: 0) }
         }
+        return world
+    }
+
+    /// What the Guiding Light says when a new universe arrives and something is different.
+    func arrivalNote(for world: World) -> String? {
+        guard id == .toTheMoon, world.has(.moon) else { return nil }
+        return "Oh! The Moon's already here this time. Careful: what would happen if we made another?"
+    }
+
+    /// The next thing the Guiding Light would try: a nudge, and a ghost showing where it would appear.
+    func nextStep(in world: World) -> (text: String, ghost: World?)? {
+        guard let goal = coreGoals.first(where: { !$0.isMet(world) }) else { return nil }
+        return (goal.nudge, goal.ghost.flatMap { world.preview($0) })
+    }
+
+    /// Bonus goals that are done, for the win card.
+    func bonusesMet(in world: World) -> [Goal] {
+        bonusGoals.filter { $0.isMet(world) }
     }
 }
 
-// MARK: - Judging a flight
+// MARK: - Judging a run
 
 extension Mission {
-    static let requiredOrbits = 3
-    static let stressTestFields = 10
-
     func evaluate(_ trace: Trace, program: [Statement]) -> MissionResult {
-        switch trace.halt {
-        case .crashed(let line):
-            return MissionResult(succeeded: false, title: "Bonk!",
-                                 message: "Line \(line) steered the rocket right into an asteroid.",
-                                 reflection: GuideVoice.pick(GuideVoice.crashes),
-                                 line: line)
-        case .error(let error):
+        if case .error(let error) = trace.halt {
             return MissionResult(succeeded: false, title: "Hmm, that didn't work",
                                  message: error.message, reflection: error.hint, line: error.line)
-        case nil:
-            break
         }
 
         let world = trace.finalWorld
+        if let missing = coreGoals.first(where: { !$0.isMet(world) }) {
+            return MissionResult(succeeded: false, title: "Not quite yet", message: missing.missing,
+                                 reflection: missing.nudge)
+        }
+
         switch id {
         case .liftoff:
-            guard let station = world.station else { break }
-            if world.rocket == station {
-                // The shortest route is 5 moves. Doing it in exactly 5 deserves a little extra.
-                let perfect = trace.moveCount == 5
-                return MissionResult(succeeded: true, title: "Docked!",
-                                     message: perfect
-                                        ? "Not a single wasted move. The station's lights are on just for you."
-                                        : "You made it, Commander! The station's lights are on just for you.",
-                                     reflection: "Every line ran in order, top to bottom. Swap two lines and you'd get a whole different flight. That's sequencing, and you just did it.")
-            }
-            if !world.isLaunched {
-                return MissionResult(succeeded: false, title: "Still on the pad",
-                                     message: "The rocket's still sitting on the pad, waiting for its big moment.",
-                                     reflection: "Every flight starts with launch(). Try putting it at the very top.")
-            }
-            return MissionResult(succeeded: false, title: "So close!",
-                                 message: "The station's still \(World.offsetPhrase(from: world.rocket, to: station)) from you.",
-                                 reflection: "Add one more move for each square in the way. You've got this.")
-
+            return evaluateLiftoff(trace, program: program)
         case .lowEarthOrbit:
-            let orbits = Self.orbitCount(of: trace.path, around: world.planetVertex)
-            guard orbits >= Self.requiredOrbits else {
-                let message = orbits == 0
-                    ? "Almost around! The rocket didn't quite make it all the way around Earth."
-                    : "That's \(orbits) \(orbits == 1 ? "orbit" : "orbits") so far. Earth's hoping for \(Self.requiredOrbits)!"
-                return MissionResult(succeeded: false, title: "\(orbits) of \(Self.requiredOrbits) orbits",
-                                     message: message,
-                                     reflection: program.usesRepeat ? "Peek at your repeat number. How many times should it go around?" : "What if you wrapped those moves in repeat 3 { }?")
-            }
-            guard program.usesRepeat else {
-                return MissionResult(succeeded: true, title: "Three times around!",
-                                     message: "You flew it with \(program.commandCount) lines. That's dedication!",
-                                     reflection: "That works! But I wonder... could repeat do the same job with fewer lines?")
-            }
-            // 5 commands (a repeat holding 4 moves) is as short as it gets.
-            let elegant = program.commandCount == 5
-            return MissionResult(succeeded: true, title: "Three times around!",
-                                 message: elegant
-                                    ? "Just \(program.commandCount) lines for \(trace.moveCount) moves through space. Beautifully done."
-                                    : "\(program.commandCount) lines of code, \(trace.moveCount) moves through space. That's the magic of a loop.",
-                                 reflection: "See the rings? Each one is a single trip through your loop. A loop is code that comes back around, just like an orbit.")
-
+            return evaluateOrbit(trace, program: program)
         case .toTheMoon:
-            guard let moonRow = world.moonRow, world.rocket.y == moonRow else {
-                let rows = world.rocket.y - (world.moonRow ?? 0)
-                return MissionResult(succeeded: false, title: "Not there yet",
-                                     message: "The Moon's still \(rows) \(rows == 1 ? "row" : "rows") up. She's waiting!",
-                                     reflection: "Does your repeat run enough times to get all the way up?")
-            }
-            let crashes = Self.stressTest(program, mission: self)
-            guard crashes == 0 else {
-                return MissionResult(succeeded: false, title: "Lucky landing!",
-                                     message: "You made it! But on \(Self.stressTestFields) new asteroid fields, your code bumped into trouble \(crashes) \(crashes == 1 ? "time" : "times").",
-                                     reflection: "Code that only works once is a lucky guess. Let it check with if asteroidAhead, and it'll work every time.")
-            }
-            return MissionResult(succeeded: true, title: "Touchdown!",
-                                 message: "You did it, Commander. The stars are yours.",
-                                 reflection: "I tried your code on \(Self.stressTestFields) brand-new asteroid fields, and it landed every single time. It looked before it leaped. That's a conditional.")
+            return evaluateMoon(trace, program: program)
         }
-        return MissionResult(succeeded: false, title: "Hmm", message: "Something unexpected happened.")
     }
 
-    /// Runs the program on fresh asteroid fields, without animation, and counts the failures.
+    private func evaluateLiftoff(_ trace: Trace, program: [Statement]) -> MissionResult {
+        let creations = trace.events.compactMap { event -> Thing? in
+            if case .created(let body) = event.kind { body.thing } else { nil }
+        }
+        let launchedPadByItself = trace.events.contains { event in
+            if case .created(let body) = event.kind { body.autoBuilt } else { false }
+        }
+        let padFirst = creations.first == .launchpad && creations.contains(.rocket) && !launchedPadByItself
+        let perfect = padFirst && program.commandCount == 3
+
+        let reflection: String
+        if launchedPadByItself {
+            reflection = "Wait, I never saw you make a launchpad. launch() noticed the rocket had nothing to stand on and built one itself! Code can fill in gaps, but the order was still yours to choose."
+        } else if creations.first == .rocket {
+            reflection = "Did you see the pad slide in underneath the rocket? You made the rocket first, so the pad had to find it. Same lines, different order, different story. That's sequencing."
+        } else {
+            reflection = "Pad, rocket, launch. Every line ran in order, and each one changed what the next could do. Swap two lines and you'd grow a different universe. By the way, I think build(), spawn(), and summon() work too. Try them!"
+        }
+        return MissionResult(succeeded: true, title: "Liftoff!",
+                             message: perfect
+                                ? "Three lines took us from empty space to a rocket in flight. Everything up here exists because you said so."
+                                : "From nothing to a rocket in flight. Everything up here exists because you said so.",
+                             reflection: reflection)
+    }
+
+    private func evaluateOrbit(_ trace: Trace, program: [Statement]) -> MissionResult {
+        let world = trace.finalWorld
+        let satellites = world.count(of: .satellite)
+        let bonuses = bonusesMet(in: world)
+        let builtSolarSystem = bonuses.count == bonusGoals.count
+
+        let message: String
+        if builtSolarSystem {
+            message = "A star, \(world.count(of: .planet)) planets, moons, and satellites. You didn't just orbit a planet, you built a whole solar system."
+        } else {
+            message = "A planet, a moon, \(satellites) satellites, and a rocket in orbit. All of it made by \(program.commandCount) lines."
+        }
+
+        let reflection: String
+        if !program.usesRepeat {
+            reflection = "That works! But I wonder... could one line say \"again\" for you? Try wrapping create(satellite) in repeat 5 { }."
+        } else if builtSolarSystem {
+            reflection = "See how the repeat did the typing for you? One line, said again and again. A loop is code that comes back around, just like an orbit."
+        } else {
+            reflection = "See how the repeat did the typing for you? A loop is code that comes back around, just like an orbit. I wonder what happens if you add create(star)..."
+        }
+        return MissionResult(succeeded: true, title: "In orbit!", message: message, reflection: reflection)
+    }
+
+    private func evaluateMoon(_ trace: Trace, program: [Statement]) -> MissionResult {
+        let failures = Self.stressTest(program, mission: self)
+        guard failures == 0 else {
+            return MissionResult(succeeded: false, title: "Lucky landing!",
+                                 message: "You built a moon base! But I tried your code in \(Self.stressTestUniverses) other universes, and it ran into trouble in \(failures) of them.",
+                                 reflection: "Some universes already have a Moon, and create(moon) doesn't like making a second one. Could your code look first? Try if not moon { create(moon) }.")
+        }
+        return MissionResult(succeeded: true, title: "Touchdown!",
+                             message: "A moon, a rover, a base, and an expedition. You've built a whole world to explore.",
+                             reflection: "I tried your code in \(Self.stressTestUniverses) different universes, with and without a Moon, and it worked every time. It looked before it created. That's a conditional.")
+    }
+
+    /// Runs the program in fresh universes, without animation, and counts the ones where it fails.
     private static func stressTest(_ program: [Statement], mission: Mission) -> Int {
-        (0..<stressTestFields).reduce(0) { failures, _ in
-            let world = mission.makeWorld(seed: UInt64.random(in: .min ... .max))
+        (0..<stressTestUniverses).reduce(0) { failures, index in
+            // Alternate on purpose so both kinds of universe are always tested.
+            let withMoon = index % 2 == 0
+            var world = mission.makeWorld(seed: UInt64.random(in: .min ... .max), gentle: true)
+            if withMoon { _ = try? world.make(.moon, verb: .create, line: 0) }
             let trace = Interpreter.run(program, in: world)
-            let landed = trace.halt == nil && trace.finalWorld.rocket.y == world.moonRow
-            return failures + (landed ? 0 : 1)
+            let worked = trace.halt == nil && mission.coreGoals.allSatisfy { $0.isMet(trace.finalWorld) }
+            return failures + (worked ? 0 : 1)
         }
-    }
-
-    /// Counts full trips around Earth by adding up how far the rocket turned around it
-    /// (the winding number). Trips around the outside or back-and-forth moves don't count.
-    static func orbitCount(of path: [GridPoint], around vertex: GridPoint?) -> Int {
-        guard let vertex, path.count > 1 else { return 0 }
-        let angles = path.map { atan2(Double($0.y) + 0.5 - Double(vertex.y), Double($0.x) + 0.5 - Double(vertex.x)) }
-        var total = 0.0
-        for (previous, next) in zip(angles, angles.dropFirst()) {
-            var delta = next - previous
-            if delta > .pi { delta -= 2 * .pi }
-            if delta < -.pi { delta += 2 * .pi }
-            total += delta
-        }
-        return Int((abs(total) + 0.001) / (2 * .pi))
     }
 }
 

@@ -106,7 +106,7 @@ struct MissionView: View {
             .accessibilityValue(session.speed.title)
 
             Menu {
-                Button("Reset Rocket", systemImage: "arrow.counterclockwise") {
+                Button("Reset Universe", systemImage: "arrow.counterclockwise") {
                     session.stop()
                 }
                 Button("Restore Starter Code", systemImage: "doc.badge.arrow.up", role: .destructive) {
@@ -165,7 +165,7 @@ struct MissionView: View {
             .arrive(delay: 0.12)
 
             CommandBarView(
-                blocks: blocks(for: session.mission.blocks),
+                blocks: blocks(for: session.mission.blocks, stage: session.mission.stage),
                 isRunning: session.isRunning,
                 isReady: session.isCodeReady,
                 onInsert: { session.insert($0) },
@@ -183,9 +183,14 @@ struct MissionView: View {
         ZStack(alignment: .bottom) {
             SpriteView(scene: session.scene, preferredFramesPerSecond: 60)
                 .accessibilityElement()
-                .accessibilityLabel("Mission map")
+                .accessibilityLabel("Your universe")
                 .accessibilityValue(session.stageDescription)
                 .accessibilityAddTraits(.updatesFrequently)
+
+            GoalChecklistView(goals: session.mission.goals, met: session.metGoals)
+                .padding(Space.m)
+                .padding(.top, Space.l)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if session.isRunning || session.result != nil {
                 OrbitProgressBar(progress: session.runProgress)

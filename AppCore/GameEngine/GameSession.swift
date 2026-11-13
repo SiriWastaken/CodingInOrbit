@@ -14,9 +14,9 @@ import Observation
 //                                                     │
 //        replayed one step at a time, at the chosen speed
 //                                                     ▼
-//        OrbitScene animates · editor highlights the line · haptics, sound, voice
+//        CosmosScene grows the universe · editor highlights the line · haptics, sound, voice
 //
-// Stopping cancels the replay task, so the rocket stops right away.
+// Stopping cancels the replay task, so the universe stops growing right away.
 
 enum RunSpeed: String, CaseIterable, Identifiable {
     case slow, normal, fast
@@ -75,12 +75,16 @@ final class GameSession {
     private(set) var stageDescription = ""
     /// How far through the current run the replay is, from 0 to 1.
     private(set) var runProgress: Double = 0
+    /// Goals that are true of the universe as it looks right now, filling in as the replay builds it.
+    private(set) var metGoals: Set<String> = []
     private var briefingIndex = 0
 
-    @ObservationIgnored let scene: OrbitScene
+    @ObservationIgnored let scene: CosmosScene
     @ObservationIgnored let editor = EditorBridge()
     @ObservationIgnored private var world: World
-    /// False once a run has used this asteroid field, so the next run gets a new one.
+    /// What the last run built, so hints can look at what's already there.
+    @ObservationIgnored private var lastWorld: World?
+    /// False once a run has used this starting universe, so the next run gets a new one.
     @ObservationIgnored private var fieldIsFresh = true
     @ObservationIgnored private var runTask: Task<Void, Never>?
     @ObservationIgnored private let haptics = HapticsPlayer()
@@ -89,6 +93,7 @@ final class GameSession {
     @ObservationIgnored private var hasMadeMistake = false
     @ObservationIgnored private var hasCheeredAllBlocks = false
     @ObservationIgnored private var isSuitedUp = false
+    @ObservationIgnored private var seenThings: Set<Thing> = []
 
     /// Commands the rocket has carried out since the app opened, across every mission.
     private static var lifetimeCommands = 0
@@ -109,10 +114,11 @@ final class GameSession {
     init(mission: Mission) {
         self.mission = mission
         self.code = mission.starterCode
-        self.world = mission.makeWorld(seed: UInt64.random(in: .min ... .max))
+        // The first universe starts the way the briefing says it will.
+        self.world = mission.makeWorld(seed: UInt64.random(in: .min ... .max), gentle: true)
         self.guideMessage = mission.briefing.first ?? ""
-        self.scene = OrbitScene(size: CGSize(width: 600, height: 600))
-        scene.onTrailTapped = { [weak self] line in self?.selectLine(line) }
+        self.scene = CosmosScene(size: CGSize(width: 600, height: 600))
+        scene.onThingTapped = { [weak self] line in self?.selectLine(line) }
     }
 
     // MARK: - Lifecycle
@@ -143,9 +149,15 @@ final class GameSession {
     }
 
     func showHint() {
-        if phase != .editing { returnToEditing() }
-        scene.showHint(mission.hintPath(in: world))
-        setGuide(mission.hint, mood: .curious)
+        if isRunning { stop() }
+        // After a run, the stage still shows what was built, so the hint can build on it.
+        let current = result != nil ? (lastWorld ?? world) : world
+        if let step = mission.nextStep(in: current) {
+            scene.showGhosts(of: step.ghost)
+            setGuide(step.text, mood: .curious)
+        } else {
+            setGuide(GuideVoice.nothingLeftToTry, mood: .delighted)
+        }
     }
 
     private func setGuide(_ message: String, mood: GuideMood? = nil, speak: Bool = true) {
@@ -174,21 +186,25 @@ final class GameSession {
     func restoreStarterCode() {
         stop()
         code = mission.starterCode
+        lastWorld = nil
         codeDidChange()
         setGuide(GuideVoice.freshStart, mood: .calm)
     }
 
-    /// Links a line of code to its part of the trail. Choosing the same line again clears it.
+    /// Links a line of code to the things it made. Choosing the same line again clears it.
     func selectLine(_ line: Int?) {
         selectedLine = (line == selectedLine) ? nil : line
-        scene.highlightTrail(line: selectedLine)
+        scene.highlightLine(selectedLine)
         if line != nil { haptics.play(.select, enabled: settings.haptics) }
     }
 
     /// "Look at you go!" the first time the code uses every block this mission offers.
     private func cheerIfAllBlocksUsed() {
         guard !hasCheeredAllBlocks, mission.blocks.count > 1 else { return }
-        let markers: [BlockKind: String] = [.launch: "launch(", .move: "move(", .repeatLoop: "repeat", .condition: "if "]
+        let markers: [BlockKind: String] = [
+            .create: "create(", .build: "build(", .spawn: "spawn(", .summon: "summon(", .launch: "launch(",
+            .orbit: "orbit(", .explore: "explore(", .move: "move(", .repeatLoop: "repeat", .condition: "if "
+        ]
         let usedAll = mission.blocks.allSatisfy { kind in markers[kind].map { code.contains($0) } ?? true }
         guard usedAll else { return }
         hasCheeredAllBlocks = true
@@ -217,6 +233,7 @@ final class GameSession {
             runProgress = 0
 
             let trace = Interpreter.run(program, in: world)
+            lastWorld = trace.finalWorld
             phase = .running
             setGuide(GuideVoice.pick(GuideVoice.running), mood: .curious, speak: false)
             runTask = Task { [weak self] in
@@ -237,7 +254,7 @@ final class GameSession {
         resetStage(newField: false)
     }
 
-    /// Goes back to editing after a finished run. To The Moon gets a fresh asteroid field.
+    /// Goes back to editing after a finished run. To The Moon starts from a new universe.
     private func returnToEditing() {
         phase = .editing
         activeLine = nil
@@ -249,10 +266,12 @@ final class GameSession {
     private func resetStage(newField: Bool) {
         if newField {
             world = mission.makeWorld(seed: UInt64.random(in: .min ... .max))
+            if let note = mission.arrivalNote(for: world) { setGuide(note, mood: .curious, speak: false) }
         }
         fieldIsFresh = true
         scene.load(world)
-        stageDescription = world.spokenDescription(rocketAt: world.rocket, launched: world.isLaunched)
+        stageDescription = world.spokenDescription()
+        metGoals = Set(mission.goals.filter { $0.isMet(world) }.map(\.id))
     }
 
     private var stepDuration: Double {
@@ -261,29 +280,15 @@ final class GameSession {
     }
 
     private func play(_ trace: Trace, program: [Statement]) async {
-        var rocket = world.rocket
-        var launched = world.isLaunched
-
         for (index, event) in trace.events.enumerated() {
             let duration = stepDuration * event.kind.pace
             activeLine = event.line
             updateNotes(for: event)
             scene.play(event, duration: duration)
-            giveFeedback(for: event, rocketAt: rocket)
-
-            switch event.kind {
-            case .moved(_, let to, _):
-                rocket = to
-                countCommand()
-            case .launched:
-                launched = true
-                countCommand()
-            case .easterEgg(let egg):
-                reactToEasterEgg(egg)
-            default:
-                break
-            }
-            stageDescription = world.spokenDescription(rocketAt: rocket, launched: launched)
+            giveFeedback(for: event)
+            react(to: event)
+            stageDescription = event.world.spokenDescription()
+            metGoals = Set(mission.goals.filter { $0.isMet(event.world) }.map(\.id))
 
             do {
                 try await Task.sleep(for: .seconds(duration))
@@ -302,6 +307,32 @@ final class GameSession {
             return
         }
         finish(with: mission.evaluate(trace, program: program))
+    }
+
+    /// The Guiding Light reacts out loud-ish (text only) as new things appear, as surprised as you are.
+    private func react(to event: StepEvent) {
+        switch event.kind {
+        case .created(let body):
+            countCommand()
+            if seenThings.insert(body.thing).inserted {
+                setGuide(GuideVoice.reaction(to: body), mood: .delighted, speak: false)
+            }
+        case .launched:
+            countCommand()
+            setGuide(GuideVoice.liftoff, mood: .delighted, speak: false)
+        case .orbited(_, _, let createdPlanet):
+            countCommand()
+            setGuide(createdPlanet ? GuideVoice.orbitMadeAPlanet : GuideVoice.orbiting, mood: .delighted, speak: false)
+        case .explored:
+            countCommand()
+            setGuide(GuideVoice.exploring, mood: .delighted, speak: false)
+        case .moved:
+            countCommand()
+        case .easterEgg(let egg):
+            reactToEasterEgg(egg)
+        default:
+            break
+        }
     }
 
     private func countCommand() {
@@ -350,50 +381,59 @@ final class GameSession {
         setGuide("\(opener)Line \(error.line): \(error.explanation)", mood: .concerned)
         haptics.play(.error, enabled: settings.haptics)
         sound.play(.error, enabled: settings.sound)
-        scene.play(StepEvent(line: error.line, kind: .runtimeError(error)), duration: 0.5)
+        scene.play(StepEvent(line: error.line, kind: .runtimeError(error), world: world), duration: 0.5)
     }
 
     private func updateNotes(for event: StepEvent) {
         switch event.kind {
         case .loopIterationStarted(let iteration, let total):
             gutterNotes[event.line] = GutterNote(text: "\(iteration)/\(total)", style: .loop)
-        case .sensed(_, _, _, let result):
+        case .sensed(_, let result, _):
             gutterNotes[event.line] = GutterNote(text: result ? "yes" : "no", style: result ? .yes : .no)
         default:
             break
         }
     }
 
-    private func giveFeedback(for event: StepEvent, rocketAt rocket: GridPoint) {
-        let pan = { (cell: GridPoint) -> Float in
-            Float(cell.x) / Float(max(self.world.width - 1, 1)) * 1.6 - 0.8
+    private func giveFeedback(for event: StepEvent) {
+        let pan = { (body: Int?) -> Float in
+            guard let body else { return 0 }
+            return self.scene.horizontalPosition(of: body) * 1.6 - 0.8
         }
         switch event.kind {
-        case .launched:
+        case .created(let body):
+            haptics.play(.pop, enabled: settings.haptics)
+            let cue: SoundCue = switch body.verb {
+            case .create, .spawn: .pop
+            case .build: .moveSide
+            case .summon: .sparkle
+            }
+            sound.play(cue, pan: pan(body.id), enabled: settings.sound)
+        case .launched(let rockets):
             haptics.play(.launch, enabled: settings.haptics)
-            sound.play(.launch, pan: pan(rocket), enabled: settings.sound)
-        case .moved(_, let to, let direction):
+            sound.play(.launch, pan: pan(rockets.first), enabled: settings.sound)
+        case .orbited(let planet, _, _):
+            haptics.play(.loop, enabled: settings.haptics)
+            sound.play(.ring, pan: pan(planet.id), enabled: settings.sound)
+        case .explored(_, let rovers, _):
+            haptics.play(.success, enabled: settings.haptics)
+            sound.play(.ping, pan: pan(rovers.first), enabled: settings.sound)
+        case .moved(let rockets, let direction):
             haptics.play(.move, enabled: settings.haptics)
             let cue: SoundCue = switch direction {
             case .up: .moveUp
             case .down: .moveDown
             case .left, .right: .moveSide
             }
-            sound.play(cue, pan: pan(to), enabled: settings.sound)
+            sound.play(cue, pan: pan(rockets.first), enabled: settings.sound)
         case .sensed:
             haptics.play(.sense, enabled: settings.haptics)
-            sound.play(.ping, pan: pan(rocket), enabled: settings.sound)
-        case .loopIterationEnded(_, _, let path):
+            sound.play(.ping, enabled: settings.sound)
+        case .loopIterationEnded:
             haptics.play(.loop, enabled: settings.haptics)
-            if path.count >= 4 && path.first == path.last {
-                sound.play(.ring, pan: pan(rocket), enabled: settings.sound)
-            }
-        case .crashed(let at, _, _):
-            haptics.play(.crash, enabled: settings.haptics)
-            sound.play(.crash, pan: pan(at), enabled: settings.sound)
         case .runtimeError:
             haptics.play(.error, enabled: settings.haptics)
-            sound.play(.error, pan: pan(rocket), enabled: settings.sound)
+            sound.play(.error, enabled: settings.sound)
         case .easterEgg:
             haptics.play(.success, enabled: settings.haptics)
         case .loopIterationStarted:

@@ -8,33 +8,42 @@
 import Foundation
 
 // The Interpreter runs a program against a World and records every step as an event.
-// The whole flight is worked out instantly; the GameSession then replays the events one at a
-// time so the rocket moves line by line. Because the run is recorded up front, Stop and speed
-// controls just change how the replay happens.
+// Each event carries a snapshot of the universe as it looked right after that step.
+// The whole run is worked out instantly; the GameSession then replays the events one at a
+// time so the universe grows line by line. Because the run is recorded up front, Stop and
+// speed controls just change how the replay happens.
 
 struct StepEvent: Equatable, Sendable {
     let line: Int
     let kind: Kind
+    /// The universe right after this step.
+    let world: World
 
     enum Kind: Equatable, Sendable {
-        case launched(at: GridPoint)
-        case moved(from: GridPoint, to: GridPoint, direction: Direction)
-        case sensed(Condition, direction: Direction, target: GridPoint, result: Bool)
+        case created(Body)
+        /// `padsBuilt` are launchpads that launch() had to make on its own.
+        case launched(rockets: [Int])
+        case orbited(planet: Body, rockets: [Int], createdPlanet: Bool)
+        case explored(landed: [Int], rovers: [Int], bases: [Int])
+        case moved(rockets: [Int], direction: Direction)
+        /// `preview` shows where the thing would appear, when the answer was "no".
+        case sensed(Condition, result: Bool, preview: World?)
         case loopIterationStarted(iteration: Int, total: Int)
-        case loopIterationEnded(iteration: Int, total: Int, path: [GridPoint])
-        case crashed(at: GridPoint, from: GridPoint, direction: Direction)
+        case loopIterationEnded(iteration: Int, total: Int)
         case runtimeError(CodeError)
         case easterEgg(EasterEgg)
 
         /// How long this step takes compared to a single move.
         var pace: Double {
             switch self {
-            case .launched: 1.5
+            case .created(let body): body.verb == .build ? 1.5 : 1.2
+            case .launched: 1.8
+            case .orbited: 2.2
+            case .explored: 3.0
             case .moved: 1.0
-            case .sensed: 0.9
-            case .loopIterationStarted: 0.3
-            case .loopIterationEnded: 0.5
-            case .crashed: 1.6
+            case .sensed: 1.1
+            case .loopIterationStarted: 0.25
+            case .loopIterationEnded: 0.3
             case .runtimeError: 1.0
             case .easterEgg: 1.2
             }
@@ -44,30 +53,40 @@ struct StepEvent: Equatable, Sendable {
     /// A short description for VoiceOver users, read as each step happens.
     var spokenDescription: String {
         switch kind {
-        case .launched: "Line \(line): liftoff!"
-        case .moved(_, _, let direction): "Line \(line): moved \(direction.rawValue)."
-        case .sensed(_, _, _, let result): "Line \(line): sensor check. \(result ? "Asteroid ahead!" : "All clear.")"
-        case .loopIterationStarted(let iteration, let total): "Repeat, round \(iteration) of \(total)."
-        case .loopIterationEnded: "Round complete."
-        case .crashed: "Line \(line): crashed into an asteroid."
-        case .runtimeError(let error): "Line \(line): \(error.message)"
-        case .easterEgg: "Line \(line): a little surprise."
+        case .created(let body):
+            "Line \(line): \(body.verb.pastTense) \(body.thing.withArticle)."
+        case .launched:
+            "Line \(line): liftoff!"
+        case .orbited(_, _, let createdPlanet):
+            "Line \(line): the rocket is orbiting\(createdPlanet ? " a brand new planet" : "")."
+        case .explored:
+            "Line \(line): the rover explores and finds the base."
+        case .moved(_, let direction):
+            "Line \(line): space bends and the rocket moves \(direction.rawValue)."
+        case .sensed(let condition, let result, _):
+            "Line \(line): checking if \(condition.text). \(result ? "Yes." : "No.")"
+        case .loopIterationStarted(let iteration, let total):
+            "Repeat, round \(iteration) of \(total)."
+        case .loopIterationEnded:
+            "Round complete."
+        case .runtimeError(let error):
+            "Line \(line): \(error.message)"
+        case .easterEgg:
+            "Line \(line): a little surprise."
         }
     }
 }
 
 struct Trace: Sendable {
     enum Halt: Equatable, Sendable {
-        case crashed(line: Int)
         case error(CodeError)
     }
 
     var events: [StepEvent] = []
-    /// Every square the rocket visited, in order, starting where it began.
-    var path: [GridPoint]
     var finalWorld: World
     var halt: Halt?
-    var moveCount = 0
+    /// How many things the code made, counting the ones launch() and orbit() made on their own.
+    var creationCount = 0
 }
 
 struct Interpreter {
@@ -80,7 +99,7 @@ struct Interpreter {
 
     private init(world: World) {
         self.world = world
-        self.trace = Trace(path: [world.rocket], finalWorld: world)
+        self.trace = Trace(finalWorld: world)
     }
 
     static func run(_ program: [Statement], in world: World) -> Trace {
@@ -102,70 +121,78 @@ struct Interpreter {
     private mutating func execute(_ statement: Statement) {
         guard countStep(line: statement.line) else { return }
 
-        switch statement {
-        case .launch(let line):
-            guard !world.isLaunched else {
-                halt(CodeError(line: line, "We're already up here!", hint: "launch() only works from the pad. Try removing this line."))
-                return
-            }
-            world.isLaunched = true
-            world.heading = .up
-            emit(line, .launched(at: world.rocket))
+        do throws(CodeError) {
+            switch statement {
+            case .make(let verb, let thing, let line):
+                let body = try world.make(thing, verb: verb, line: line)
+                trace.creationCount += 1
+                emit(line, .created(body))
 
-        case .move(let direction, let line):
-            guard world.isLaunched else {
-                halt(CodeError(line: line, "The rocket's still on the launch pad.", hint: "Every flight starts with launch(). Try putting it first."))
-                return
-            }
-            let from = world.rocket
-            let to = from.moved(direction)
-            world.heading = direction
-            guard world.contains(to) else {
-                halt(CodeError(line: line, "Whoa, that's the edge of the map!", hint: "Even explorers need boundaries. Try a different direction here."))
-                return
-            }
-            if world.asteroids.contains(to) {
-                emit(line, .crashed(at: to, from: from, direction: direction))
-                trace.halt = .crashed(line: line)
-                return
-            }
-            world.rocket = to
-            trace.path.append(to)
-            trace.moveCount += 1
-            emit(line, .moved(from: from, to: to, direction: direction))
+            case .launch(let line):
+                let liftoff = try world.launchAll(line: line)
+                // Pads built on the way up appear first, so the pad is there before the rocket leaves it.
+                for pad in liftoff.builtPads {
+                    trace.creationCount += 1
+                    emit(line, .created(pad), world: worldBeforeLiftoff(liftoff))
+                }
+                emit(line, .launched(rockets: liftoff.rockets))
 
-        case .repeatLoop(let count, let body, let line):
-            guard count > 0 else { return }
-            for iteration in 1...count {
-                guard countStep(line: line) else { return }
-                emit(line, .loopIterationStarted(iteration: iteration, total: count))
-                let startIndex = trace.path.count - 1
-                execute(body)
-                if isHalted { return }
-                emit(line, .loopIterationEnded(iteration: iteration, total: count, path: Array(trace.path[startIndex...])))
+            case .orbit(let line):
+                let orbit = try world.orbitAll(line: line)
+                if orbit.createdPlanet { trace.creationCount += 1 }
+                emit(line, .orbited(planet: orbit.planet, rockets: orbit.rockets, createdPlanet: orbit.createdPlanet))
+
+            case .explore(let line):
+                let trip = try world.exploreAll(line: line)
+                emit(line, .explored(landed: trip.landed, rovers: trip.rovers, bases: trip.bases))
+
+            case .move(let direction, let line):
+                let moved = try world.move(direction, line: line)
+                emit(line, .moved(rockets: moved, direction: direction))
+
+            case .repeatLoop(let count, let body, let line):
+                guard count > 0 else { return }
+                for iteration in 1...count {
+                    guard countStep(line: line) else { return }
+                    emit(line, .loopIterationStarted(iteration: iteration, total: count))
+                    execute(body)
+                    if isHalted { return }
+                    emit(line, .loopIterationEnded(iteration: iteration, total: count))
+                }
+
+            case .ifElse(let condition, let then, let otherwise, let line):
+                let result = world.sense(condition)
+                // A "no" about something that doesn't exist yet shows where it could appear.
+                let preview = (!result && !condition.negated) ? world.preview(condition.thing) : nil
+                emit(line, .sensed(condition, result: result, preview: preview))
+                execute(result ? then : (otherwise ?? []))
+
+            case .easterEgg(let egg, let line):
+                emit(line, .easterEgg(egg))
             }
-
-        case .ifElse(let condition, let then, let otherwise, let line):
-            let reading = world.sense(condition)
-            emit(line, .sensed(condition, direction: world.heading, target: reading.target, result: reading.result))
-            execute(reading.result ? then : (otherwise ?? []))
-
-        case .easterEgg(let egg, let line):
-            emit(line, .easterEgg(egg))
+        } catch {
+            halt(error)
         }
+    }
+
+    /// The world as it was a moment before liftoff, with the pad in place but the rocket still on it.
+    private func worldBeforeLiftoff(_ liftoff: World.Liftoff) -> World {
+        var snapshot = world
+        for id in liftoff.rockets { snapshot.setFlight(id: id, .grounded) }
+        return snapshot
     }
 
     private mutating func countStep(line: Int) -> Bool {
         steps += 1
         guard steps <= Self.stepLimit else {
-            halt(CodeError(line: line, "That's a lot of looping! I got dizzy after \(Self.stepLimit) steps and stopped.", hint: "Check your repeat numbers. The rocket needs far fewer steps than that."))
+            halt(CodeError(line: line, "That's a lot of looping! I got dizzy after \(Self.stepLimit) steps and stopped.", hint: "Check your repeat numbers. The universe needs far fewer steps than that."))
             return false
         }
         return true
     }
 
-    private mutating func emit(_ line: Int, _ kind: StepEvent.Kind) {
-        trace.events.append(StepEvent(line: line, kind: kind))
+    private mutating func emit(_ line: Int, _ kind: StepEvent.Kind, world override: World? = nil) {
+        trace.events.append(StepEvent(line: line, kind: kind, world: override ?? world))
     }
 
     private mutating func halt(_ error: CodeError) {

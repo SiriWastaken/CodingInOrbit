@@ -7,53 +7,102 @@
 
 import Foundation
 
-// The rocket's language is a tiny slice of Swift. Programs are turned into a tree of
-// statements (an AST) so that repeat and if can hold other statements inside them.
+// The language of Coding In Orbit is a tiny slice of Swift, and every command makes
+// something happen in the universe. Programs become a tree of statements (an AST) so that
+// repeat and if can hold other statements inside them.
 //
+//     create(launchpad)
+//     spawn(rocket)
 //     launch()
 //     repeat 3 {
-//         if asteroidAhead {
-//             move(right)
-//         }
-//         move(up)
+//         create(satellite)
 //     }
+//     if not moon {
+//         summon(moon)
+//     }
+
+/// Everything that can exist in the universe.
+enum Thing: String, CaseIterable, Sendable, Codable {
+    case launchpad, rocket, star, planet, moon, satellite, asteroid, comet, rover, base
+
+    /// "a launchpad", "an asteroid"
+    var article: String {
+        "aeiou".contains(rawValue.first ?? "x") ? "an" : "a"
+    }
+
+    var withArticle: String { "\(article) \(rawValue)" }
+
+    var plural: String {
+        switch self {
+        case .base: "bases"
+        default: rawValue + "s"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .launchpad: "square.stack.3d.up.fill"
+        case .rocket: "airplane.departure"
+        case .star: "sun.max.fill"
+        case .planet: "globe.europe.africa.fill"
+        case .moon: "moon.fill"
+        case .satellite: "antenna.radiowaves.left.and.right"
+        case .asteroid: "circle.hexagongrid.fill"
+        case .comet: "sparkle"
+        case .rover: "car.side.fill"
+        case .base: "house.fill"
+        }
+    }
+}
+
+/// Four ways to say "make this exist". They all work on anything, but each one arrives
+/// differently: build assembles piece by piece, spawn pops in, summon streaks down from
+/// the stars, and create gently glows into being.
+enum Verb: String, CaseIterable, Sendable, Codable {
+    case create, build, spawn, summon
+
+    var pastTense: String {
+        switch self {
+        case .create: "created"
+        case .build: "built"
+        case .spawn: "spawned"
+        case .summon: "summoned"
+        }
+    }
+}
 
 enum Direction: String, CaseIterable, Sendable {
     case up, down, left, right
 
-    /// How one move in this direction changes a grid position (y grows downward).
+    /// How one move in this direction shifts the rocket (y grows upward on screen).
     var delta: (dx: Int, dy: Int) {
         switch self {
-        case .up: (0, -1)
-        case .down: (0, 1)
+        case .up: (0, 1)
+        case .down: (0, -1)
         case .left: (-1, 0)
         case .right: (1, 0)
         }
     }
-
-    /// The rocket's rotation when facing this direction (radians, counterclockwise from up).
-    var angle: CGFloat {
-        switch self {
-        case .up: 0
-        case .left: .pi / 2
-        case .down: .pi
-        case .right: -.pi / 2
-        }
-    }
 }
 
-/// Secret commands. They don't move the rocket, they just make something nice happen.
+/// Secret commands. They don't change the universe, they just make something nice happen.
 enum EasterEgg: String, Sendable {
     case hello, suitUp, stargaze
 }
 
-/// A sensor the rocket can check with `if`.
-enum Condition: String, CaseIterable, Sendable {
-    case asteroidAhead
+/// A question the universe can answer: does this thing exist yet? `if not moon` asks the opposite.
+struct Condition: Equatable, Sendable {
+    var thing: Thing
+    var negated = false
+
+    var text: String { "\(negated ? "not " : "")\(thing.rawValue)" }
 }
 
 indirect enum Statement: Equatable, Sendable {
+    case make(Verb, Thing, line: Int)
     case launch(line: Int)
+    case orbit(line: Int)
+    case explore(line: Int)
     case move(Direction, line: Int)
     case repeatLoop(count: Int, body: [Statement], line: Int)
     case ifElse(Condition, then: [Statement], otherwise: [Statement]?, line: Int)
@@ -61,7 +110,8 @@ indirect enum Statement: Equatable, Sendable {
 
     var line: Int {
         switch self {
-        case .launch(let line), .move(_, let line), .repeatLoop(_, _, let line), .ifElse(_, _, _, let line), .easterEgg(_, let line):
+        case .make(_, _, let line), .launch(let line), .orbit(let line), .explore(let line), .move(_, let line),
+             .repeatLoop(_, _, let line), .ifElse(_, _, _, let line), .easterEgg(_, let line):
             line
         }
     }
@@ -75,7 +125,7 @@ indirect enum Statement: Equatable, Sendable {
         switch self {
         case .easterEgg:
             0
-        case .launch, .move:
+        case .make, .launch, .orbit, .explore, .move:
             1
         case .repeatLoop(_, let body, _):
             1 + body.commandCount
@@ -86,17 +136,17 @@ indirect enum Statement: Equatable, Sendable {
 
     var usesRepeat: Bool {
         switch self {
-        case .launch, .move, .easterEgg: false
         case .repeatLoop: true
         case .ifElse(_, let then, let otherwise, _): then.usesRepeat || (otherwise?.usesRepeat ?? false)
+        default: false
         }
     }
 
     var usesIf: Bool {
         switch self {
-        case .launch, .move, .easterEgg: false
         case .repeatLoop(_, let body, _): body.usesIf
         case .ifElse: true
+        default: false
         }
     }
 }

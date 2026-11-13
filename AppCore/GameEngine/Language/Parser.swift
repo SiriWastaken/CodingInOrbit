@@ -99,7 +99,9 @@ private extension Character {
 }
 
 struct Parser {
-    static let commands = ["launch", "move", "repeat", "if", "else"]
+    static let verbs = Verb.allCases.map(\.rawValue)
+    static let actions = ["launch", "orbit", "explore", "move"]
+    static let commands = verbs + actions + ["repeat", "if", "else"]
 
     private let tokens: [Token]
     private var position = 0
@@ -114,6 +116,18 @@ struct Parser {
             return .success(try parser.parseBlock(openedOnLine: nil))
         } catch {
             return .failure(error)
+        }
+    }
+
+    /// A line of code that shows how a command is written, for hints.
+    static func example(for command: String) -> String {
+        switch command {
+        case "create", "build", "spawn", "summon": "\(command)(rocket)"
+        case "launch", "orbit", "explore": "\(command)()"
+        case "move": "move(up)"
+        case "repeat": "repeat 3 {"
+        case "if": "if moon {"
+        default: command
         }
     }
 
@@ -180,10 +194,18 @@ struct Parser {
             throw unexpected(token)
         }
         switch word {
-        case "launch":
+        case "create", "build", "spawn", "summon":
             advance()
-            try parseEmptyArguments(for: "launch", line: token.line)
-            return .launch(line: token.line)
+            let verb = Verb(rawValue: word) ?? .create
+            return .make(verb, try parseThingArgument(command: word, line: token.line), line: token.line)
+        case "launch", "orbit", "explore":
+            advance()
+            try parseEmptyArguments(for: word, line: token.line)
+            switch word {
+            case "launch": return .launch(line: token.line)
+            case "orbit": return .orbit(line: token.line)
+            default: return .explore(line: token.line)
+            }
         case "move":
             advance()
             return .move(try parseDirectionArgument(line: token.line), line: token.line)
@@ -219,6 +241,58 @@ struct Parser {
             throw CodeError(line: line, "\(name)() likes its parentheses empty.", hint: "Write it as \(name)().")
         }
         advance()
+    }
+
+    /// Reads the `(thing)` after create, build, spawn, or summon.
+    private mutating func parseThingArgument(command: String, line: Int) throws(CodeError) -> Thing {
+        let example = Self.example(for: command)
+        let choices = "Try \(example), or make something else: \(Thing.allCases.map(\.rawValue).joined(separator: ", "))."
+        guard current.kind == .leftParen else {
+            if case .identifier(let word) = current.kind, let thing = Thing(rawValue: word.lowercased()) {
+                throw CodeError(line: line, "\(command) needs parentheses around the thing.",
+                                hint: "Like this: \(command)(\(thing.rawValue)).")
+            }
+            throw CodeError(line: line, "What should we \(command)?", hint: choices)
+        }
+        advance()
+
+        guard case .identifier(let word) = current.kind else {
+            throw CodeError(line: line, "What should we \(command)?", hint: choices)
+        }
+        guard let thing = Thing(rawValue: word) else {
+            throw unknownThing(word, command: command, line: line)
+        }
+        advance()
+
+        guard current.kind == .rightParen else {
+            throw CodeError(line: line, "\(command)( is missing its closing ).", hint: "Every ( needs a ) to hug it: \(command)(\(thing.rawValue)).")
+        }
+        advance()
+        return thing
+    }
+
+    private func unknownThing(_ word: String, command: String, line: Int) -> CodeError {
+        let lowered = word.lowercased()
+        if let thing = Thing(rawValue: lowered) {
+            return CodeError(line: line, "Things like to be lowercase.", hint: "Try \(command)(\(thing.rawValue)).")
+        }
+        if lowered.hasSuffix("s"), let thing = Thing(rawValue: String(lowered.dropLast())) {
+            return CodeError(line: line, "One at a time! \"\(word)\" is plural.",
+                             hint: "Try \(command)(\(thing.rawValue)). Want several? Wrap it in repeat 3 { }.")
+        }
+        if lowered == "earth" || lowered == "mars" || lowered == "jupiter" || lowered == "saturn" {
+            return CodeError(line: line, "Planets get their names on their own.", hint: "Just ask for a planet: \(command)(planet).")
+        }
+        if lowered == "sun" {
+            return CodeError(line: line, "The sun is a star!", hint: "Try \(command)(star).")
+        }
+        if ["ship", "spaceship", "shuttle"].contains(lowered) {
+            return CodeError(line: line, "That sounds like a rocket to me.", hint: "Try \(command)(rocket).")
+        }
+        let suggestion = Suggestions.closest(to: word, in: Thing.allCases.map(\.rawValue))
+        return CodeError(line: line, "I don't know what a \"\(word)\" is. I'd love to find out, though!",
+                         hint: suggestion.map { "Did you mean \(command)(\($0))?" }
+                            ?? "Things I know so far: \(Thing.allCases.map(\.rawValue).joined(separator: ", ")).")
     }
 
     private mutating func parseDirectionArgument(line: Int) throws(CodeError) -> Direction {
@@ -282,25 +356,36 @@ struct Parser {
         let hasParenthesis = current.kind == .leftParen
         if hasParenthesis { advance() }
 
-        guard case .identifier(let word) = current.kind else {
-            throw CodeError(line: line, "What should the rocket check?", hint: "Try: if asteroidAhead {")
+        // `if not moon` and `if !moon` both ask "is there no moon?"
+        var negated = false
+        if case .identifier("not") = current.kind {
+            negated = true
+            advance()
+        } else if case .symbol("!") = current.kind {
+            negated = true
+            advance()
         }
-        guard let condition = Condition(rawValue: word) else {
-            let suggestion = Suggestions.closest(to: word, in: Condition.allCases.map(\.rawValue))
-            throw CodeError(line: line, "The rocket doesn't have a sensor called \"\(word)\".",
-                            hint: suggestion.map { "Did you mean \($0)?" } ?? "Try: if asteroidAhead {")
+
+        guard case .identifier(let word) = current.kind else {
+            throw CodeError(line: line, "What should we check for?", hint: "Try: if moon { or if not moon {")
+        }
+        guard let thing = Thing(rawValue: word) else {
+            let suggestion = Suggestions.closest(to: word, in: Thing.allCases.map(\.rawValue))
+            throw CodeError(line: line, "I don't know a thing called \"\(word)\", so I can't check for one.",
+                            hint: suggestion.map { "Did you mean if \($0) {?" } ?? "Try: if moon { or if asteroid {")
         }
         advance()
+        let condition = Condition(thing: thing, negated: negated)
 
         if hasParenthesis {
             guard current.kind == .rightParen else {
-                throw CodeError(line: line, "if( is missing its closing ).", hint: "Try writing it as: if \(word) {")
+                throw CodeError(line: line, "if( is missing its closing ).", hint: "Try writing it as: if \(condition.text) {")
             }
             advance()
         }
 
         guard current.kind == .leftBrace else {
-            throw CodeError(line: line, "if \(word) needs a { to open its block.", hint: "Like this: if \(word) {")
+            throw CodeError(line: line, "if \(condition.text) needs a { to open its block.", hint: "Like this: if \(condition.text) {")
         }
         advance()
         let thenBody = try parseBlock(openedOnLine: line)
@@ -331,12 +416,15 @@ struct Parser {
         let lowered = word.lowercased()
 
         if Self.commands.contains(lowered) {
-            let example = lowered == "launch" ? "launch()" : lowered == "move" ? "move(up)" : lowered
-            return CodeError(line: line, "Rockets are picky about capital letters!", hint: "Try writing it as \(example).")
+            return CodeError(line: line, "The universe is picky about capital letters!", hint: "Try writing it as \(Self.example(for: lowered)).")
         }
-        if lowered == "rocket" {
-            return CodeError(line: line, "No need to say \"\(word)\". It already knows you're talking to it!",
-                             hint: "Just write the command, like move(up).")
+        if let thing = Thing(rawValue: lowered) {
+            return CodeError(line: line, "\"\(word)\" is something you can make, not a command.",
+                             hint: "Which command should bring it to life? Maybe create(\(thing.rawValue))?")
+        }
+        if lowered.hasSuffix("s"), let thing = Thing(rawValue: String(lowered.dropLast())) {
+            return CodeError(line: line, "\"\(word)\" is something you can make, one at a time.",
+                             hint: "Maybe create(\(thing.rawValue))? Wrap it in repeat 3 { } for several.")
         }
         if let direction = Direction(rawValue: lowered) {
             return CodeError(line: line, "\"\(word)\" is a direction. Which command should go that way?", hint: "Maybe move(\(direction.rawValue))?")
@@ -344,22 +432,30 @@ struct Parser {
         if let direction = Direction.allCases.first(where: { lowered == "move" + $0.rawValue }) {
             return CodeError(line: line, "So close! The direction goes inside the parentheses.", hint: "Like this: move(\(direction.rawValue)).")
         }
+        if let verb = Verb.allCases.first(where: { lowered.hasPrefix($0.rawValue) && lowered.count > $0.rawValue.count }),
+           let thing = Thing.allCases.first(where: { lowered == verb.rawValue + $0.rawValue }) {
+            return CodeError(line: line, "So close! The thing goes inside the parentheses.", hint: "Like this: \(verb.rawValue)(\(thing.rawValue)).")
+        }
         if lowered == "suitup" || lowered == "stargaze" {
             let name = lowered == "suitup" ? "suitUp" : "stargaze"
             return CodeError(line: line, "Ooh, you're onto something secret...", hint: "Try writing it exactly as \(name)().")
         }
-        if Condition(rawValue: word) != nil {
-            return CodeError(line: line, "\(word) is a sensor, so it needs a question to answer.", hint: "Try: if \(word) {")
+        if ["make", "add", "place", "put", "new", "generate"].contains(lowered) {
+            return CodeError(line: line, "I think the word you want is create!", hint: "Like this: create(planet). Build, spawn, and summon work too.")
+        }
+        if ["fly", "go", "land", "takeoff", "liftoff"].contains(lowered) {
+            return CodeError(line: line, "Hmm, \"\(word)\" isn't one I know. Is it launch()?", hint: "launch() sends your rockets skyward.")
         }
         if ["for", "while", "func", "let", "var", "print", "return", "switch", "guard"].contains(word) {
-            return CodeError(line: line, "Ooh, \"\(word)\" is real Swift! This little rocket is still learning, though.",
-                             hint: "For now it knows launch(), move(...), repeat, and if.")
+            return CodeError(line: line, "Ooh, \"\(word)\" is real Swift! We haven't found it in this universe yet, though.",
+                             hint: "For now I know create, build, spawn, summon, launch, orbit, explore, repeat, and if.")
         }
         if let suggestion = Suggestions.closest(to: word, in: Self.commands) {
-            let example = suggestion == "launch" ? "launch()" : suggestion == "move" ? "move(up)" : suggestion
-            return CodeError(line: line, "Hmm, I don't recognize \"\(word)\".", hint: "Did you mean \(example)?")
+            return CodeError(line: line, "Hmm, I don't recognize \"\(word)\". Neither does the universe!",
+                             hint: "Did you mean \(Self.example(for: suggestion))?")
         }
-        return CodeError(line: line, "Hmm, I don't recognize \"\(word)\".", hint: "Want to try launch(), move(...), repeat, or if?")
+        return CodeError(line: line, "Hmm, I don't recognize \"\(word)\". Neither does the universe!",
+                         hint: "Want to try create(planet), launch(), repeat, or if?")
     }
 
     private func unexpected(_ token: Token) -> CodeError {
@@ -369,13 +465,13 @@ struct Parser {
         case .leftBrace:
             CodeError(line: token.line, "This { isn't attached to a repeat or an if.", hint: "Try putting it at the end of a repeat or if line.")
         case .leftParen, .rightParen:
-            CodeError(line: token.line, "This parenthesis wandered off on its own.", hint: "Parentheses go right after a command, like move(up).")
+            CodeError(line: token.line, "This parenthesis wandered off on its own.", hint: "Parentheses go right after a command, like create(rocket).")
         case .symbol("."):
-            CodeError(line: token.line, "No dots needed here!", hint: "Just the command, like move(up).")
+            CodeError(line: token.line, "No dots needed here!", hint: "Just the command, like create(rocket).")
         case .symbol(let character):
             CodeError(line: token.line, "I'm not sure what \"\(character)\" means here.", hint: "Try removing it.")
         default:
-            CodeError(line: token.line, "I didn't expect \(token.kind.display) here.", hint: "Each line should start with a command, like move(up).")
+            CodeError(line: token.line, "I didn't expect \(token.kind.display) here.", hint: "Each line should start with a command, like create(rocket).")
         }
     }
 }

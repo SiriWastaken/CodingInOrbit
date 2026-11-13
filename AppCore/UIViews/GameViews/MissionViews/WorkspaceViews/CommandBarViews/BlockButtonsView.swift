@@ -38,9 +38,9 @@ private struct BlockChip: View {
 
     private var accent: Color {
         switch block.id {
-        case .launch, .move: .nebulaBlue
-        case .repeatLoop: .goldTrim
-        case .condition: .ember
+        case .create, .build, .spawn, .summon: .nebulaBlue
+        case .launch, .orbit, .explore, .move: .ember
+        case .repeatLoop, .condition: .goldTrim
         }
     }
 

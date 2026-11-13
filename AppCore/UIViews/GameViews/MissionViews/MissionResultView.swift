@@ -41,7 +41,7 @@ struct MissionResultView: View {
 
             HStack(spacing: Space.s) {
                 Button(action: onTryAgain) {
-                    Label(isMoonMission ? "New field" : "Try again", systemImage: isMoonMission ? "sparkles" : "arrow.counterclockwise")
+                    Label(isMoonMission ? "New universe" : "Try again", systemImage: isMoonMission ? "sparkles" : "arrow.counterclockwise")
                 }
                 .buttonStyle(BouncyButtonStyle(kind: .secondary))
 
