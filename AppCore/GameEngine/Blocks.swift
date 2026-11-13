@@ -14,12 +14,9 @@ import SwiftUI
 // shows a menu. "$0" marks where the cursor lands after the snippet is inserted.
 
 enum BlockKind: String, Sendable {
-    case create, build, spawn, summon
-    case launch, orbit, explore, move
+    case create
+    case launch, orbit, explore, land, move
     case repeatLoop, condition
-
-    /// The verb a creation block writes, if it is one.
-    var verb: Verb? { Verb(rawValue: rawValue) }
 }
 
 struct Snippet: Identifiable, Sendable {
@@ -41,39 +38,34 @@ struct Block: Identifiable, Sendable {
 func blocks(for kinds: [BlockKind], stage: Stage) -> [Block] {
     kinds.map { kind in
         switch kind {
-        case .create, .build, .spawn, .summon:
-            let verb = kind.verb ?? .create
-            let icon = switch verb {
-            case .create: "sparkles"
-            case .build: "hammer.fill"
-            case .spawn: "plus.circle.fill"
-            case .summon: "wand.and.stars"
-            }
-            return Block(id: kind, title: verb.rawValue.capitalized, icon: icon, category: "Creation",
-                         snippets: stage.allowed.map { Snippet(title: "\(verb.rawValue.capitalized) \($0.rawValue)", icon: $0.icon, code: "\(verb.rawValue)(\($0.rawValue))") })
+        case .create:
+            return Block(id: kind, title: "Create", icon: "sparkles", category: "Creation",
+                         snippets: stage.allowed.map { Snippet(title: $0.rawValue.capitalized, icon: $0.icon, code: "create \($0.rawValue)") })
         case .launch:
-            return single(kind, "Launch", "flame.fill", "launch()")
+            return single(kind, "Launch", "flame.fill", "launch")
         case .orbit:
-            return single(kind, "Orbit", "arrow.triangle.2.circlepath", "orbit()")
+            return single(kind, "Orbit", "arrow.triangle.2.circlepath", "orbit")
         case .explore:
-            return single(kind, "Explore", "binoculars.fill", "explore()")
+            return single(kind, "Explore", "binoculars.fill", "explore")
+        case .land:
+            return single(kind, "Land", "arrow.down.to.line", "land")
         case .move:
             return Block(id: kind, title: "Move", icon: "arrow.up.and.down.and.arrow.left.and.right", category: "Movement",
-                         snippets: Direction.allCases.map { Snippet(title: "Move \($0.rawValue)", icon: "arrow.\($0.rawValue)", code: "move(\($0.rawValue))") })
+                         snippets: Direction.allCases.map { Snippet(title: "Move \($0.rawValue)", icon: "arrow.\($0.rawValue)", code: "move \($0.rawValue)") })
         case .repeatLoop:
             return Block(id: kind, title: "Repeat", icon: "arrow.triangle.2.circlepath", category: "Loop", snippets: [
-                Snippet(title: "Repeat 3 times", icon: "arrow.triangle.2.circlepath", code: "repeat 3 {\n    $0\n}")
+                Snippet(title: "Repeat 3 times", icon: "arrow.triangle.2.circlepath", code: "repeat 3 times:\n    $0")
             ])
         case .condition:
             let subject = switch stage {
             case .launchSite: Thing.rocket.rawValue
             case .orbit: Thing.planet.rawValue
-            case .moon: Thing.moon.rawValue
+            case .moon: Thing.asteroid.rawValue
             }
             return Block(id: kind, title: "If", icon: "questionmark.diamond", category: "Condition", snippets: [
-                Snippet(title: "If \(subject) exists", icon: "questionmark.diamond", code: "if \(subject) {\n    $0\n}"),
-                Snippet(title: "If there's no \(subject)", icon: "nosign", code: "if not \(subject) {\n    $0\n}"),
-                Snippet(title: "If… else", icon: "arrow.triangle.branch", code: "if \(subject) {\n    $0\n} else {\n    \n}")
+                Snippet(title: "If \(subject) exists", icon: "questionmark.diamond", code: "if \(subject):\n    $0"),
+                Snippet(title: "If there's no \(subject)", icon: "nosign", code: "if not \(subject):\n    $0"),
+                Snippet(title: "If… else", icon: "arrow.triangle.branch", code: "if \(subject):\n    $0\nelse:\n    ")
             ])
         }
     }

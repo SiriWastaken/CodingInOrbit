@@ -73,6 +73,10 @@ struct CosmosLayout {
         case .moon: layout.arrangeMoon(world, w: w, h: h)
         }
         layout.arrangeBackground(world, w: w, h: h)
+        // A rocket flying free always points the way it last moved.
+        for rocket in world.rockets where rocket.flight == .flying {
+            layout.placements[rocket.id]?.rotation = rocket.facing.angle
+        }
         return layout
     }
 
@@ -235,6 +239,18 @@ struct CosmosLayout {
                 x = w * 0.31 + roverSize * 1.15 * CGFloat(index)
             }
             placements[rover.id] = Placement(position: CGPoint(x: x, y: surface(at: x)), size: roverSize, rotation: tilt(at: x))
+        }
+    }
+}
+
+extension Direction {
+    /// The rocket's turn for this heading. The art points up, so up is no turn at all.
+    var angle: CGFloat {
+        switch self {
+        case .up: 0
+        case .left: .pi / 2
+        case .down: .pi
+        case .right: -.pi / 2
         }
     }
 }

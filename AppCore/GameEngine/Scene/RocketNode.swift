@@ -40,6 +40,8 @@ final class RocketNode: SKNode {
     private var helmet: SKNode?
     private var stateMachine: GKStateMachine?
     private var reduceMotion = false
+    /// True while the rocket should be idling between reactions (false once it has landed).
+    private var wantsIdle = false
 
     var currentState: GKState? { stateMachine?.currentState }
     var isSuitedUp: Bool { helmet != nil }
@@ -112,23 +114,18 @@ final class RocketNode: SKNode {
 
     // MARK: Personality
 
-    /// While waiting, the rocket sways and bobs a little, like it's humming to itself.
+    /// While waiting, the rocket bobs 4 points up and down, once every two seconds.
     func startIdling() {
+        wantsIdle = true
         art.removeAction(forKey: "idle")
         guard !reduceMotion else { return }
-        let sway = SKAction.sequence([
-            .rotate(toAngle: 0.06, duration: 1.1),
-            .rotate(toAngle: -0.05, duration: 1.3),
-            .rotate(toAngle: 0, duration: 0.9),
-            .wait(forDuration: 1.6)
-        ])
-        sway.timingMode = .easeInEaseOut
-        let bob = SKAction.sequence([.moveBy(x: 0, y: 4, duration: 1.4), .moveBy(x: 0, y: -4, duration: 1.4)])
-        bob.timingMode = .easeInEaseOut
-        art.run(.repeatForever(.group([sway, bob])), withKey: "idle")
+        let up = SKAction.moveBy(x: 0, y: 4, duration: 1)
+        up.timingMode = .easeInEaseOut
+        art.run(.repeatForever(.sequence([up, up.reversed()])), withKey: "idle")
     }
 
     func stopIdling() {
+        wantsIdle = false
         art.removeAction(forKey: "idle")
         art.run(.group([.rotate(toAngle: 0, duration: 0.15), .move(to: .zero, duration: 0.15)]))
     }
@@ -155,6 +152,50 @@ final class RocketNode: SKNode {
         hop.timingMode = .easeInEaseOut
         art.run(.group([hop, .sequence([.rotate(byAngle: 0.35, duration: 0.12), .rotate(byAngle: -0.7, duration: 0.18), .rotate(byAngle: 0.35, duration: 0.12)])]))
         react(after: 0.1)
+    }
+
+    /// Runs a reaction on the art layer. The idle sway pauses so the two don't fight over rotation.
+    private func perform(_ reaction: SKAction) {
+        guard !reduceMotion else { return }
+        art.removeAction(forKey: "idle")
+        art.run(.sequence([reaction, .run { [weak self] in
+            self?.art.zRotation = 0
+            self?.art.position = .zero
+            if self?.wantsIdle == true { self?.startIdling() }
+        }]), withKey: "mood")
+    }
+
+    private static func degrees(_ value: CGFloat) -> CGFloat { value * .pi / 180 }
+
+    /// Happy: a quick wiggle, 5° each way, 0.2 seconds in all.
+    func wiggle(after delay: TimeInterval = 0) {
+        perform(.sequence([
+            .wait(forDuration: delay),
+            .rotate(toAngle: Self.degrees(-5), duration: 0.05), .rotate(toAngle: Self.degrees(5), duration: 0.08),
+            .rotate(toAngle: 0, duration: 0.07)
+        ]))
+    }
+
+    /// Confused: a 10° head tilt and back, 0.3 seconds, like a puppy hearing a new word.
+    func tilt() {
+        let lean = SKAction.rotate(toAngle: Self.degrees(10), duration: 0.15)
+        lean.timingMode = .easeOut
+        let back = SKAction.rotate(toAngle: 0, duration: 0.15)
+        back.timingMode = .easeInEaseOut
+        perform(.sequence([lean, back]))
+    }
+
+    /// Excited: a fast little shiver right before the code runs.
+    func shiver() {
+        let jiggle = (0..<6).map { i in SKAction.moveTo(x: i.isMultiple(of: 2) ? 2.5 : -2.5, duration: 0.035) }
+        perform(.sequence(jiggle + [.moveTo(x: 0, duration: 0.04)]))
+    }
+
+    /// Discovery: one quick spin.
+    func spin() {
+        let turn = SKAction.rotate(byAngle: -.pi * 2, duration: 0.55)
+        turn.timingMode = .easeInEaseOut
+        perform(.group([turn, .sequence([.moveBy(x: 0, y: 10, duration: 0.25), .moveBy(x: 0, y: -10, duration: 0.3)])]))
     }
 
     /// Astronaut mode: a helmet with a blinking antenna pops on.

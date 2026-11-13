@@ -7,71 +7,62 @@
 
 import SwiftUI
 
-// TODO(Sri): These words are placeholders. Rewrite them in your own voice before submitting.
+// TODO(Sri): The story, AI note, and asset lines are placeholders. Rewrite them in your own
+// voice and make sure they're accurate before submitting.
 
 struct CreditsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
-            CozyBackground(starCount: 110)
+            CozyBackground(starCount: 0)
 
             VStack(spacing: Space.xl) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        IconButtonLabel(systemName: "chevron.left")
+                ZStack {
+                    Text("Credits")
+                        .font(Typeface.title)
+                        .foregroundStyle(Color.starlight)
+                        .accessibilityAddTraits(.isHeader)
+                    HStack {
+                        Button {
+                            dismiss()
+                        } label: {
+                            IconButtonLabel(systemName: "chevron.left")
+                        }
+                        .buttonStyle(PressableButtonStyle())
+                        .accessibilityLabel("Back")
+                        Spacer()
                     }
-                    .buttonStyle(PressableButtonStyle())
-                    .accessibilityLabel("Back")
-                    Spacer()
                 }
                 .padding(.horizontal, Space.l)
                 .padding(.top, Space.l)
 
                 Spacer()
 
-                GuidingLightOrb(mood: .calm, size: Space.xxl * 3)
-                    .arrive()
-
-                VStack(spacing: Space.s) {
-                    Text("Coding in Orbit")
-                        .font(Typeface.largeTitle)
+                VStack(spacing: Space.l) {
+                    Text("Sri Ganty")
+                        .font(Typeface.body)
                         .foregroundStyle(Color.starlight)
-                    Text("Made by Sri Ganty")
-                        .font(Typeface.title)
-                        .foregroundStyle(Color.goldTrim)
-                }
-                .arrive(delay: 0.08)
-
-                VStack(spacing: Space.m) {
-                    Text("\u{201C}We can build to understand.\u{201D}")
-                        .font(Typeface.body.italic())
-                        .foregroundStyle(Color.starlight)
-                    Text("— Grant Sanderson, 3Blue1Brown")
+                    Text("I learn by seeing things move. So I built a universe where every line of code makes something you can watch: a launchpad, a rocket, a moon. If you can see it, you can understand it. This is for everyone who learns that way too.")
+                        .font(Typeface.body)
+                        .foregroundStyle(Color.starlight.opacity(0.7))
+                    Text("Built with help from an AI coding assistant. Every design and teaching decision is my own.")
                         .font(Typeface.caption)
-                        .foregroundStyle(Color.starlight.opacity(0.6))
+                        .foregroundStyle(Color.starlight.opacity(0.5))
+                    Text("Made with SwiftUI, SpriteKit, GameplayKit, Core Haptics, and AVFoundation. Works with VoiceOver, Dynamic Type, and Reduce Motion.")
+                        .font(Typeface.caption)
+                        .foregroundStyle(Color.starlight.opacity(0.5))
                 }
                 .multilineTextAlignment(.center)
-                .padding(Space.l)
-                .cozyPanel()
-                .rotationEffect(.degrees(-0.8))
-                .arrive(delay: 0.16)
-
-                Text("For everyone who learns by seeing it move.")
-                    .font(Typeface.body)
-                    .foregroundStyle(Color.starlight.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .arrive(delay: 0.24)
-
-                Text("Built with SwiftUI, SpriteKit, GameplayKit, Core Haptics, and AVFoundation.")
-                    .font(Typeface.caption)
-                    .foregroundStyle(Color.starlight.opacity(0.45))
-                    .multilineTextAlignment(.center)
-                    .arrive(delay: 0.3)
+                .frame(maxWidth: 500)
+                .arrive()
 
                 Spacer()
+
+                Text("Built with SwiftUI and love.")
+                    .font(Typeface.caption)
+                    .foregroundStyle(Color.starlight.opacity(0.3))
+                    .padding(.bottom, Space.l)
             }
             .padding(.horizontal, Space.xxl)
         }

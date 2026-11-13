@@ -56,12 +56,12 @@ extension SceneArt {
     /// Four kinds of planet, by the order they're made: Earth, Mars, Saturn, Neptune.
     static func planet(radius: CGFloat, style: Int, animated: Bool) -> SKNode {
         let planet = SKNode()
-        let glowColor = [Palette.nebulaBlue, Palette.ember, Palette.goldTrim, Palette.nebulaBlue][style % 4]
+        let glowColor = [Palette.nebulaPurple, Palette.goldTrim, Palette.goldTrim, Palette.nebulaPurple][style % 4]
         planet.addChild(glow(color: glowColor, diameter: radius * 4.4, alpha: 0.38))
 
         switch style % 4 {
         case 0:
-            let earth = sphere(radius: radius, fill: ocean, edge: Palette.nebulaBlue) { surface in
+            let earth = sphere(radius: radius, fill: ocean, edge: Palette.nebulaPurple) { surface in
                 for (x, y, width) in [(-0.3, 0.3, 0.7), (0.4, -0.2, 0.6), (-0.1, -0.55, 0.5)] as [(CGFloat, CGFloat, CGFloat)] {
                     surface.addChild(patch(CGSize(width: radius * width * 2, height: radius * 0.45),
                                            at: CGPoint(x: radius * x, y: radius * y), color: sand))
@@ -70,10 +70,10 @@ extension SceneArt {
             if animated { earth.surface.run(.repeatForever(.rotate(byAngle: -.pi * 2, duration: 40))) }
             planet.addChild(earth.node)
         case 1:
-            let mars = sphere(radius: radius, fill: Palette.ember.mixed(with: Palette.dusk, 0.3), edge: Palette.ember) { surface in
+            let mars = sphere(radius: radius, fill: Palette.goldTrim.mixed(with: Palette.midnightBlue, 0.3), edge: Palette.goldTrim) { surface in
                 for (x, y, width) in [(-0.35, 0.15, 0.5), (0.3, -0.3, 0.6), (0.1, 0.5, 0.35)] as [(CGFloat, CGFloat, CGFloat)] {
                     surface.addChild(patch(CGSize(width: radius * width * 2, height: radius * 0.35),
-                                           at: CGPoint(x: radius * x, y: radius * y), color: Palette.ember.mixed(with: Palette.dusk, 0.6)))
+                                           at: CGPoint(x: radius * x, y: radius * y), color: Palette.goldTrim.mixed(with: Palette.midnightBlue, 0.6)))
                 }
                 surface.addChild(patch(CGSize(width: radius * 0.7, height: radius * 0.22),
                                        at: CGPoint(x: 0, y: radius * 0.9), color: Palette.starlight.withAlphaComponent(0.85)))
@@ -91,7 +91,7 @@ extension SceneArt {
             let saturn = sphere(radius: radius, fill: Palette.goldTrim.mixed(with: sand, 0.4), edge: Palette.goldTrim) { surface in
                 for (y, height) in [(0.55, 0.2), (0.15, 0.3), (-0.3, 0.22), (-0.65, 0.16)] as [(CGFloat, CGFloat)] {
                     surface.addChild(patch(CGSize(width: radius * 2.4, height: radius * height),
-                                           at: CGPoint(x: 0, y: radius * y), color: Palette.goldTrim.mixed(with: Palette.ember, 0.35).withAlphaComponent(0.7)))
+                                           at: CGPoint(x: 0, y: radius * y), color: Palette.goldTrim.mixed(with: Palette.goldTrim, 0.35).withAlphaComponent(0.7)))
                 }
             }
             planet.addChild(saturn.node)
@@ -106,10 +106,10 @@ extension SceneArt {
             front.zPosition = 1
             planet.addChild(front)
         default:
-            let neptune = sphere(radius: radius, fill: Palette.nebulaBlue.mixed(with: Palette.deepSpace, 0.3), edge: Palette.nebulaBlue) { surface in
+            let neptune = sphere(radius: radius, fill: Palette.nebulaPurple.mixed(with: Palette.deepSpace, 0.3), edge: Palette.nebulaPurple) { surface in
                 for (y, height) in [(0.5, 0.25), (0.0, 0.3), (-0.5, 0.25)] as [(CGFloat, CGFloat)] {
                     surface.addChild(patch(CGSize(width: radius * 2.4, height: radius * height),
-                                           at: CGPoint(x: 0, y: radius * y), color: Palette.nebulaBlue.mixed(with: Palette.starlight, 0.3).withAlphaComponent(0.55)))
+                                           at: CGPoint(x: 0, y: radius * y), color: Palette.nebulaPurple.mixed(with: Palette.starlight, 0.3).withAlphaComponent(0.55)))
                 }
                 surface.addChild(patch(CGSize(width: radius * 0.5, height: radius * 0.28),
                                        at: CGPoint(x: -radius * 0.25, y: -radius * 0.2), color: Palette.deepSpace.withAlphaComponent(0.6)))
@@ -126,7 +126,7 @@ extension SceneArt {
             for _ in 0..<5 {
                 let crater = SKShapeNode(circleOfRadius: radius * CGFloat(0.08 + 0.1 * random.nextUniform()))
                 crater.position = CGPoint(x: radius * CGFloat(random.nextUniform() * 1.4 - 0.7), y: radius * CGFloat(random.nextUniform() * 1.4 - 0.7))
-                crater.fillColor = moonDust.mixed(with: Palette.dusk, 0.25)
+                crater.fillColor = moonDust.mixed(with: Palette.midnightBlue, 0.25)
                 crater.strokeColor = .clear
                 surface.addChild(crater)
             }
@@ -142,7 +142,7 @@ extension SceneArt {
     /// The sun: a burning core, a warm glow, and slowly turning rays.
     static func sun(radius: CGFloat, animated: Bool) -> SKNode {
         let sun = SKNode()
-        sun.addChild(glow(color: Palette.ember, diameter: radius * 4.6, alpha: 0.28))
+        sun.addChild(glow(color: Palette.goldTrim, diameter: radius * 4.6, alpha: 0.28))
         sun.addChild(glow(color: Palette.goldTrim, diameter: radius * 3.2, alpha: 0.5))
 
         for (scale, direction) in [(CGFloat(2.6), CGFloat(1)), (CGFloat(2.0), CGFloat(-1))] {
@@ -176,7 +176,7 @@ extension SceneArt {
         tail.addLine(to: CGPoint(x: size * 0.18, y: size * 0.05))
         tail.close()
         let outer = SKShapeNode(path: tail.cgPath)
-        outer.fillColor = Palette.nebulaBlue.withAlphaComponent(0.35)
+        outer.fillColor = Palette.nebulaPurple.withAlphaComponent(0.35)
         outer.strokeColor = .clear
         comet.addChild(outer)
 
@@ -200,21 +200,21 @@ extension SceneArt {
     /// A satellite: a small box with two solar panels and a blinking light.
     static func satellite(size: CGFloat, animated: Bool) -> SKNode {
         let satellite = SKNode()
-        let panelColor = Palette.nebulaBlue.mixed(with: Palette.dusk, 0.35)
+        let panelColor = Palette.nebulaPurple.mixed(with: Palette.midnightBlue, 0.35)
         for side: CGFloat in [-1, 1] {
             let panel = SKShapeNode(rect: CGRect(x: side < 0 ? -size * 0.5 : size * 0.17, y: -size * 0.1, width: size * 0.33, height: size * 0.2), cornerRadius: 1)
             panel.fillColor = panelColor
-            panel.strokeColor = Palette.nebulaBlue
+            panel.strokeColor = Palette.nebulaPurple
             panel.lineWidth = 1
             satellite.addChild(panel)
         }
         let core = SKShapeNode(rect: CGRect(x: -size * 0.17, y: -size * 0.14, width: size * 0.34, height: size * 0.28), cornerRadius: 2)
         core.fillColor = Palette.starlight
-        core.strokeColor = Palette.starlight.mixed(with: Palette.dusk, 0.4)
+        core.strokeColor = Palette.starlight.mixed(with: Palette.midnightBlue, 0.4)
         core.lineWidth = 1
         satellite.addChild(core)
 
-        let light = glow(color: Palette.ember, diameter: size * 0.4, alpha: 1)
+        let light = glow(color: Palette.goldTrim, diameter: size * 0.4, alpha: 1)
         light.position = CGPoint(x: 0, y: size * 0.2)
         if animated { light.run(.repeatForever(.sequence([.fadeAlpha(to: 0.15, duration: 0.6), .fadeAlpha(to: 1, duration: 0.6)]))) }
         satellite.addChild(light)
@@ -260,7 +260,7 @@ extension SceneArt {
             island.addChild(crater)
         }
 
-        let metal = Palette.dusk.mixed(with: Palette.starlight, 0.35)
+        let metal = Palette.midnightBlue.mixed(with: Palette.starlight, 0.35)
         let platform = SKShapeNode(rect: CGRect(x: -width * 0.46, y: 0, width: width * 0.92, height: width * 0.05), cornerRadius: 2)
         platform.fillColor = metal
         platform.strokeColor = metal.mixed(with: Palette.starlight, 0.3)
@@ -276,7 +276,7 @@ extension SceneArt {
         arm.strokeColor = .clear
         island.addChild(arm)
 
-        let light = glow(color: Palette.ember, diameter: width * 0.18, alpha: 0.9)
+        let light = glow(color: Palette.goldTrim, diameter: width * 0.18, alpha: 0.9)
         light.position = CGPoint(x: width * 0.325, y: width * 0.66)
         if animated { light.run(.repeatForever(.sequence([.fadeAlpha(to: 0.2, duration: 0.6), .fadeAlpha(to: 0.9, duration: 0.6)]))) }
         island.addChild(light)
@@ -296,7 +296,7 @@ extension SceneArt {
         let ground = SKNode()
         ground.addChild(glow(color: Palette.goldTrim, diameter: radius * 2.15, alpha: 0.1))
         let surface = SKShapeNode(circleOfRadius: radius)
-        surface.fillColor = moonDust.mixed(with: Palette.dusk, 0.12)
+        surface.fillColor = moonDust.mixed(with: Palette.midnightBlue, 0.12)
         surface.strokeColor = Palette.starlight.withAlphaComponent(0.7)
         surface.lineWidth = 3
         ground.addChild(surface)
@@ -310,8 +310,8 @@ extension SceneArt {
             let crater = SKShapeNode(ellipseOf: CGSize(width: size * 2.4, height: size))
             crater.position = CGPoint(x: cos(angle) * (radius - depth), y: sin(angle) * (radius - depth))
             crater.zRotation = angle - .pi / 2
-            crater.fillColor = moonDust.mixed(with: Palette.dusk, 0.3)
-            crater.strokeColor = moonDust.mixed(with: Palette.dusk, 0.45)
+            crater.fillColor = moonDust.mixed(with: Palette.midnightBlue, 0.3)
+            crater.strokeColor = moonDust.mixed(with: Palette.midnightBlue, 0.45)
             crater.lineWidth = 1
             surface.addChild(crater)
         }
@@ -325,8 +325,8 @@ extension SceneArt {
         for x in [-0.3, 0, 0.3] as [CGFloat] {
             let wheel = SKShapeNode(circleOfRadius: wheelRadius)
             wheel.position = CGPoint(x: size * x, y: wheelRadius)
-            wheel.fillColor = Palette.dusk
-            wheel.strokeColor = Palette.starlight.mixed(with: Palette.dusk, 0.4)
+            wheel.fillColor = Palette.midnightBlue
+            wheel.strokeColor = Palette.starlight.mixed(with: Palette.midnightBlue, 0.4)
             wheel.lineWidth = 1.5
             let spoke = SKShapeNode(rect: CGRect(x: -wheelRadius * 0.7, y: -1, width: wheelRadius * 1.4, height: 2))
             spoke.fillColor = Palette.starlight.withAlphaComponent(0.6)
@@ -337,19 +337,19 @@ extension SceneArt {
 
         let hull = SKShapeNode(rect: CGRect(x: -size * 0.42, y: wheelRadius * 1.5, width: size * 0.84, height: size * 0.2), cornerRadius: size * 0.04)
         hull.fillColor = Palette.starlight
-        hull.strokeColor = Palette.starlight.mixed(with: Palette.dusk, 0.4)
+        hull.strokeColor = Palette.starlight.mixed(with: Palette.midnightBlue, 0.4)
         hull.lineWidth = 1
         rover.addChild(hull)
 
         let cabin = SKShapeNode(rect: CGRect(x: size * 0.02, y: wheelRadius * 1.5 + size * 0.2, width: size * 0.3, height: size * 0.14), cornerRadius: size * 0.03)
-        cabin.fillColor = Palette.nebulaBlue.mixed(with: Palette.dusk, 0.2)
-        cabin.strokeColor = Palette.starlight.mixed(with: Palette.dusk, 0.4)
+        cabin.fillColor = Palette.nebulaPurple.mixed(with: Palette.midnightBlue, 0.2)
+        cabin.strokeColor = Palette.starlight.mixed(with: Palette.midnightBlue, 0.4)
         cabin.lineWidth = 1
         rover.addChild(cabin)
 
         let panel = SKShapeNode(rect: CGRect(x: -size * 0.36, y: wheelRadius * 1.5 + size * 0.2, width: size * 0.34, height: size * 0.04))
-        panel.fillColor = Palette.nebulaBlue.mixed(with: Palette.dusk, 0.35)
-        panel.strokeColor = Palette.nebulaBlue
+        panel.fillColor = Palette.nebulaPurple.mixed(with: Palette.midnightBlue, 0.35)
+        panel.strokeColor = Palette.nebulaPurple
         panel.lineWidth = 1
         panel.zRotation = 0.12
         rover.addChild(panel)
@@ -369,7 +369,7 @@ extension SceneArt {
         let dome = UIBezierPath(arcCenter: .zero, radius: radius, startAngle: 0, endAngle: .pi, clockwise: true)
         dome.close()
         let shell = SKShapeNode(path: dome.cgPath)
-        shell.fillColor = Palette.starlight.mixed(with: Palette.nebulaBlue, 0.3)
+        shell.fillColor = Palette.starlight.mixed(with: Palette.nebulaPurple, 0.3)
         shell.strokeColor = Palette.starlight
         shell.lineWidth = max(1.5, size * 0.02)
         base.addChild(shell)
@@ -389,8 +389,8 @@ extension SceneArt {
         base.addChild(lights)
 
         let door = SKShapeNode(rect: CGRect(x: -radius * 0.14, y: 0, width: radius * 0.28, height: radius * 0.3), cornerRadius: 2)
-        door.fillColor = Palette.dusk
-        door.strokeColor = Palette.starlight.mixed(with: Palette.dusk, 0.4)
+        door.fillColor = Palette.midnightBlue
+        door.strokeColor = Palette.starlight.mixed(with: Palette.midnightBlue, 0.4)
         door.lineWidth = 1
         base.addChild(door)
 
@@ -398,13 +398,13 @@ extension SceneArt {
         mast.fillColor = Palette.starlight
         mast.strokeColor = .clear
         base.addChild(mast)
-        let beacon = glow(color: Palette.ember, diameter: size * 0.12, alpha: 1)
+        let beacon = glow(color: Palette.goldTrim, diameter: size * 0.12, alpha: 1)
         beacon.position = CGPoint(x: radius * 0.55 + size * 0.0075, y: radius * 1.2)
         if animated { beacon.run(.repeatForever(.sequence([.fadeAlpha(to: 0.2, duration: 0.8), .fadeAlpha(to: 1, duration: 0.8)]))) }
         base.addChild(beacon)
 
         let footing = SKShapeNode(rect: CGRect(x: -radius * 1.1, y: -size * 0.025, width: radius * 2.2, height: size * 0.05), cornerRadius: 2)
-        footing.fillColor = Palette.dusk.mixed(with: Palette.starlight, 0.3)
+        footing.fillColor = Palette.midnightBlue.mixed(with: Palette.starlight, 0.3)
         footing.strokeColor = .clear
         base.addChild(footing)
         return (base, lights)
@@ -423,7 +423,7 @@ extension SceneArt {
         cloth.addLine(to: CGPoint(x: 1.5, y: height * 0.64))
         cloth.close()
         let banner = SKShapeNode(path: cloth.cgPath)
-        banner.fillColor = Palette.ember
+        banner.fillColor = Palette.goldTrim
         banner.strokeColor = .clear
         flag.addChild(banner)
         return flag
@@ -435,7 +435,7 @@ extension SceneArt {
     static func fabricTexture(size: CGSize, cell: CGFloat) -> SKTexture {
         let image = UIGraphicsImageRenderer(size: size).image { context in
             let cg = context.cgContext
-            cg.setStrokeColor(Palette.nebulaBlue.cgColor)
+            cg.setStrokeColor(Palette.nebulaPurple.cgColor)
             cg.setLineWidth(1.5)
             var x: CGFloat = 0
             while x <= size.width + 0.5 {

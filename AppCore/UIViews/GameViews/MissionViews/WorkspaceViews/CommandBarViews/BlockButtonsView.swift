@@ -19,30 +19,17 @@ struct BlockButtonsView: View {
                 }
             }
             .padding(.horizontal, Space.xs)
-            .padding(.vertical, Space.s)
         }
     }
 }
 
-/// One block. Each sits at a slightly different tilt, like cards scattered on a desk,
-/// and gives a little wiggle when you add it to your code.
+/// One block: a quiet outlined chip in code type. Tapping it flashes purple as the code lands.
 private struct BlockChip: View {
     let block: Block
     let index: Int
     let onInsert: (String) -> Void
 
-    @State private var wiggles = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var tilt: Double { [-2, 1.5, -1, 2][index % 4] }
-
-    private var accent: Color {
-        switch block.id {
-        case .create, .build, .spawn, .summon: .nebulaBlue
-        case .launch, .orbit, .explore, .move: .ember
-        case .repeatLoop, .condition: .goldTrim
-        }
-    }
+    @State private var isFlashing = false
 
     var body: some View {
         Group {
@@ -52,7 +39,7 @@ private struct BlockChip: View {
                 } label: {
                     chip
                 }
-                .buttonStyle(PressableButtonStyle())
+                .buttonStyle(PressableButtonStyle(scale: 0.96))
             } else {
                 Menu {
                     ForEach(block.snippets) { snippet in
@@ -64,7 +51,7 @@ private struct BlockChip: View {
                     chip
                 }
                 .menuStyle(.button)
-                .buttonStyle(PressableButtonStyle())
+                .buttonStyle(PressableButtonStyle(scale: 0.96))
                 .accessibilityHint("Opens a menu of choices")
             }
         }
@@ -72,28 +59,19 @@ private struct BlockChip: View {
     }
 
     private func add(_ code: String) {
-        wiggles += 1
         onInsert(code)
+        isFlashing = true
+        withAnimation(.easeOut(duration: 0.15).delay(0.15)) { isFlashing = false }
     }
 
     private var chip: some View {
-        let isStill = reduceMotion
-        return Label(block.title, systemImage: block.icon)
-            .font(Typeface.button)
-            .foregroundStyle(Color.starlight)
+        let shape = RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
+        return Text(block.title.lowercased())
+            .font(Typeface.code)
+            .foregroundStyle(Color.starlight.opacity(0.8))
             .padding(.horizontal, Space.m)
-            .padding(.vertical, Space.s)
-            .background(Color.dusk, in: Capsule())
-            .overlay(Capsule().strokeBorder(accent.opacity(0.55), lineWidth: 1.5))
-            .shadow(color: Color.deepSpace.opacity(0.5), radius: Space.xs, y: 2)
-            .rotationEffect(.degrees(tilt))
-            .keyframeAnimator(initialValue: 0.0, trigger: wiggles) { content, angle in
-                content.rotationEffect(.degrees(isStill ? 0 : angle))
-            } keyframes: { _ in
-                SpringKeyframe(-9, duration: 0.08)
-                SpringKeyframe(7, duration: 0.1)
-                SpringKeyframe(-3, duration: 0.1)
-                SpringKeyframe(0, duration: 0.2)
-            }
+            .frame(minHeight: Tap.minimum)
+            .background(Color.nebulaPurple.opacity(isFlashing ? 0.3 : 0), in: shape)
+            .overlay(shape.strokeBorder(Color.starlight.opacity(0.1), lineWidth: 1))
     }
 }

@@ -16,7 +16,7 @@ class AccessibilityManager: ObservableObject {
     @AppStorage("isColorBlindMode") var isColorBlindMode = false
     @AppStorage("isDarkMode") var isDarkMode = false
     @AppStorage("isInvertColors") var isInvertColors = false
-    @AppStorage("isSpeechEnabled") var isSpeechEnabled = true
+    @AppStorage("isSpeechEnabled") var isSpeechEnabled = false
     @AppStorage("isHapticsEnabled") var isHapticsEnabled = true
     @AppStorage("isSoundEnabled") var isSoundEnabled = true
     @AppStorage("speechVoice") var speechVoice = "Default"
@@ -60,7 +60,7 @@ class AccessibilityManager: ObservableObject {
         isColorBlindMode = false
         isDarkMode = false
         isInvertColors = false
-        isSpeechEnabled = true
+        isSpeechEnabled = false
         isHapticsEnabled = true
         isSoundEnabled = true
         speechVoice = "Default"

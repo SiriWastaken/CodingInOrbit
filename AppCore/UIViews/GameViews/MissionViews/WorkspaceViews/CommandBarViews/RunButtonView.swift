@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Run, or Stop while the rocket is flying. When the code is ready to go, it breathes with a soft gold glow.
+/// Run, or Stop while the rocket is flying. Run is the only filled thing in the command bar.
 struct RunButtonView: View {
     let isRunning: Bool
     let isReady: Bool
@@ -22,13 +22,11 @@ struct RunButtonView: View {
         } label: {
             Label(isRunning ? "Stop" : "Run", systemImage: isRunning ? "stop.fill" : "play.fill")
                 .contentTransition(.symbolEffect(.replace))
+                .frame(minWidth: 80 - Space.xl * 2)
         }
-        .buttonStyle(BouncyButtonStyle(kind: isRunning ? .ember : .primary))
-        .phaseAnimator(isReady && !isRunning && !reduceMotion ? [false, true] : [false]) { content, glowing in
-            content.shadow(color: Color.goldTrim.opacity(glowing ? 0.8 : 0), radius: glowing ? Space.l : Space.xs)
-        } animation: { _ in
-            Motion.breathe
-        }
+        .buttonStyle(BouncyButtonStyle(kind: isRunning ? .secondary : .run))
+        // When the code is ready, the play icon gently pulses.
+        .symbolEffect(.pulse, isActive: isReady && !isRunning && !reduceMotion)
         .keyboardShortcut("r", modifiers: .command)
         .accessibilityHint(isRunning ? "Stops the rocket" : "Runs your code")
     }

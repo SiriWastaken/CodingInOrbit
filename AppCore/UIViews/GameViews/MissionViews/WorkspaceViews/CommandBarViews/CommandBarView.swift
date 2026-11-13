@@ -24,9 +24,9 @@ struct CommandBarView: View {
 
             RunButtonView(isRunning: isRunning, isReady: isReady, onRun: onRun, onStop: onStop)
         }
-        .padding(.horizontal, Space.m)
-        .padding(.vertical, Space.xs)
-        .cozyPanel()
+        .padding(Space.s)
+        .background(Color.midnightBlue.opacity(0.95), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+        .softShadow()
         .padding(.horizontal, Space.m)
         .padding(.bottom, Space.m)
     }

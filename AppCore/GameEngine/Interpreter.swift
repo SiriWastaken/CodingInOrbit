@@ -36,16 +36,10 @@ struct StepEvent: Equatable, Sendable {
         /// How long this step takes compared to a single move.
         var pace: Double {
             switch self {
-            case .created(let body): body.verb == .build ? 1.5 : 1.2
-            case .launched: 1.8
-            case .orbited: 2.2
-            case .explored: 3.0
-            case .moved: 1.0
-            case .sensed: 1.1
-            case .loopIterationStarted: 0.25
-            case .loopIterationEnded: 0.3
-            case .runtimeError: 1.0
-            case .easterEgg: 1.2
+            // Every command is one quick step. Touchdown gets a little longer, so the descent reads.
+            case .created, .launched, .orbited, .moved, .sensed, .runtimeError, .easterEgg: 1
+            case .explored: 2.5
+            case .loopIterationStarted, .loopIterationEnded: 0.15
             }
         }
     }
@@ -54,7 +48,7 @@ struct StepEvent: Equatable, Sendable {
     var spokenDescription: String {
         switch kind {
         case .created(let body):
-            "Line \(line): \(body.verb.pastTense) \(body.thing.withArticle)."
+            "Line \(line): created \(body.thing.withArticle)."
         case .launched:
             "Line \(line): liftoff!"
         case .orbited(_, _, let createdPlanet):
@@ -90,7 +84,7 @@ struct Trace: Sendable {
 }
 
 struct Interpreter {
-    /// Stops runaway programs like repeat 1000000 { } before they freeze the app.
+    /// Stops runaway programs like repeat 1000000 times: before they freeze the app.
     static let stepLimit = 400
 
     private var world: World
@@ -123,8 +117,8 @@ struct Interpreter {
 
         do throws(CodeError) {
             switch statement {
-            case .make(let verb, let thing, let line):
-                let body = try world.make(thing, verb: verb, line: line)
+            case .make(let thing, let line):
+                let body = try world.make(thing, line: line)
                 trace.creationCount += 1
                 emit(line, .created(body))
 
@@ -145,6 +139,10 @@ struct Interpreter {
             case .explore(let line):
                 let trip = try world.exploreAll(line: line)
                 emit(line, .explored(landed: trip.landed, rovers: trip.rovers, bases: trip.bases))
+
+            case .land(let line):
+                let landed = try world.land(line: line)
+                emit(line, .explored(landed: landed, rovers: [], bases: []))
 
             case .move(let direction, let line):
                 let moved = try world.move(direction, line: line)

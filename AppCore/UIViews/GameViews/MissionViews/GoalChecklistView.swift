@@ -15,21 +15,15 @@ struct GoalChecklistView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var visibleGoals: [Goal] {
-        // Bonus goals stay hidden until the real ones are done, so they feel like a surprise.
-        let coreDone = goals.filter { !$0.isBonus }.allSatisfy { met.contains($0.id) }
-        return goals.filter { !$0.isBonus || coreDone }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: Space.xs) {
-            ForEach(visibleGoals) { goal in
+            ForEach(goals) { goal in
                 let done = met.contains(goal.id)
                 HStack(spacing: Space.xs) {
                     Image(systemName: done ? "checkmark.circle.fill" : goal.icon)
                         .foregroundStyle(done ? Color.goldTrim : Color.starlight.opacity(0.5))
                         .contentTransition(.symbolEffect(.replace))
-                    Text(goal.isBonus ? "★ \(goal.title)" : goal.title)
+                    Text(goal.title)
                         .foregroundStyle(done ? Color.starlight : Color.starlight.opacity(0.55))
                 }
                 .font(Typeface.caption)
@@ -43,12 +37,12 @@ struct GoalChecklistView: View {
                 .accessibilityLabel("\(goal.title), \(done ? "done" : "not yet")")
             }
         }
-        .animation(reduceMotion ? nil : Motion.arrive, value: visibleGoals.count)
+        .animation(reduceMotion ? nil : Motion.arrive, value: goals.count)
     }
 }
 
 #Preview {
-    GoalChecklistView(goals: Mission.lowEarthOrbit.goals, met: ["planet"])
+    GoalChecklistView(goals: Mission.liftoff.goals, met: ["liftoff"])
         .padding()
         .background(CozyBackground())
 }

@@ -7,13 +7,14 @@
 
 import SwiftUI
 
+/// The title page: the rocket, the name, and Liftoff. Options and Credits wait quietly below.
 struct HomeView: View {
     @StateObject var accessibilityManager = AccessibilityManager()
 
     var body: some View {
         NavigationStack {
             ZStack {
-                CozyBackground(starCount: 90, splashOpacity: 0.2)
+                CozyBackground(starCount: 15, showsSplash: true)
 
                 VStack(spacing: Space.xl) {
                     Spacer()
@@ -22,52 +23,44 @@ struct HomeView: View {
                         .frame(width: 120, height: 120)
                         .arrive()
 
-                    VStack(spacing: Space.xs) {
-                        Text("Coding in")
-                            .font(Typeface.title)
-                            .foregroundStyle(Color.starlight.opacity(0.7))
-                        Text("Orbit")
-                            .font(Typeface.largeTitle)
-                            .foregroundStyle(Color.starlight)
-                            .shadow(color: Color.goldTrim.opacity(0.35), radius: Space.l)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .arrive(delay: 0.08)
-
-                    Text("Build it. Watch it fly. Understand it.")
-                        .font(Typeface.body)
-                        .foregroundStyle(Color.starlight.opacity(0.6))
+                    Text("Coding in Orbit")
+                        .font(Typeface.hero)
+                        .foregroundStyle(Color.starlight)
                         .multilineTextAlignment(.center)
-                        .arrive(delay: 0.14)
+                        .accessibilityAddTraits(.isHeader)
+                        .arrive(delay: 0.08)
 
                     VStack(spacing: Space.m) {
                         NavigationLink {
-                            InitGameView()
+                            CarouselView()
                         } label: {
-                            Label("Liftoff", systemImage: "flame.fill")
-                                .frame(minWidth: 200)
-                                .padding(.vertical, Space.xs)
+                            Text("Liftoff").frame(width: 280 - Space.xl * 2)
                         }
                         .buttonStyle(BouncyButtonStyle(kind: .primary))
 
                         NavigationLink {
                             OptionsView()
                         } label: {
-                            Text("Options").frame(minWidth: 200)
+                            Text("Options").frame(width: 280 - Space.xl * 2)
                         }
                         .buttonStyle(BouncyButtonStyle(kind: .secondary))
 
                         NavigationLink {
                             CreditsView()
                         } label: {
-                            Text("Credits").frame(minWidth: 200)
+                            Text("Credits").frame(width: 280 - Space.xl * 2)
                         }
                         .buttonStyle(BouncyButtonStyle(kind: .secondary))
                     }
                     .padding(.top, Space.l)
-                    .arrive(delay: 0.22)
+                    .arrive(delay: 0.16)
 
                     Spacer()
+
+                    Text("Built for the Swift Student Challenge 2027.")
+                        .font(Typeface.caption)
+                        .foregroundStyle(Color.starlight.opacity(0.4))
+                        .padding(.bottom, Space.l)
                 }
                 .padding(.horizontal, Space.xxl)
             }
@@ -79,25 +72,18 @@ struct HomeView: View {
     }
 }
 
-/// The home screen's little doodled rocket, bobbing on a sketchy orbit with its flame flickering.
+/// The title page's rocket, bobbing gently with its flame flickering.
 private struct FloatingRocket: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
             let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
-                OrbitGlyph()
-                    .stroke(Color.goldTrim.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .scaleEffect(1.5)
-                    .rotationEffect(.degrees(-12))
-                RocketGlyph()
-                    .stroke(Color.starlight, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                    .background(RocketGlyph().fill(Color.ember.opacity(0.35)))
-                    .shadow(color: Color.goldTrim.opacity(0.4 + 0.2 * sin(time * 9)), radius: Space.s)
-                    .rotationEffect(.degrees(8 + 3 * sin(time * 0.8)))
-                    .offset(y: sin(time * 1.2) * Double(Space.s))
-            }
+            RocketGlyph()
+                .stroke(Color.starlight, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .background(RocketGlyph().fill(Color.nebulaPurple))
+                .rotationEffect(.degrees(8 + 3 * sin(time * 0.8)))
+                .offset(y: sin(time * .pi) * Double(Space.xs))
         }
         .accessibilityHidden(true)
     }

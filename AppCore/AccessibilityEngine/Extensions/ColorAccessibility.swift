@@ -16,14 +16,14 @@ extension Color {
     }
 
     static func adaptiveBackground(_ manager: AccessibilityManager) -> Color {
-        manager.isHighContrast ? .deepSpace : .dusk
+        manager.isHighContrast ? .deepSpace : .midnightBlue
     }
 
     static func adaptiveAccent(_ manager: AccessibilityManager) -> Color {
-        manager.isColorBlindMode ? .nebulaBlue : .goldTrim
+        manager.isColorBlindMode ? .nebulaPurple : .goldTrim
     }
 
     static func adaptiveSecondary(_ manager: AccessibilityManager) -> Color {
-        manager.isColorBlindMode ? .starlight.opacity(0.6) : .ember
+        manager.isColorBlindMode ? .starlight.opacity(0.6) : .goldTrim
     }
 }

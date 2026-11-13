@@ -34,19 +34,19 @@ enum Feedback {
 
 // MARK: - Buttons
 
-/// Squishes on press and springs back with a little bounce. Every button press also gives a soft haptic tap.
+/// Squishes on press and springs back with a little bounce, with a light haptic tap.
 struct BouncyButtonStyle: ButtonStyle {
     enum Kind {
-        /// The one thing to do next. Lamplight gold.
+        /// The one thing to do next. Filled nebula purple with the soft shadow.
         case primary
-        /// Everything else. A quiet panel with a brass edge.
+        /// Everything else. Transparent with a hairline edge.
         case secondary
-        /// Stop, or anything that ends something. Ember.
-        case ember
+        /// Run. Soft teal, the only filled element in the command bar.
+        case run
     }
 
     var kind: Kind = .secondary
-    /// Smaller text and padding, for buttons tucked inside panels.
+    /// Smaller text, for buttons tucked inside panels. Still a 44pt tap target.
     var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -60,29 +60,49 @@ private struct BouncyButtonBody: View {
     let compact: Bool
     @Environment(\.isEnabled) private var isEnabled
 
+    private var height: CGFloat {
+        if compact || kind == .run { return Tap.minimum }
+        return kind == .primary ? 56 : 48
+    }
+
+    private var radius: CGFloat {
+        switch kind {
+        case .primary: compact ? Radius.medium : Radius.large
+        case .secondary: Radius.medium
+        case .run: Radius.small
+        }
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        configuration.label
+            .font(compact ? Typeface.caption : Typeface.button)
+            .foregroundStyle(ink)
+            .padding(.horizontal, compact ? Space.m : Space.xl)
+            .frame(minHeight: height)
+            .background(fill, in: shape)
+            .overlay(shape.strokeBorder(Color.starlight.opacity(kind == .secondary ? 0.2 : 0), lineWidth: 1))
+            .shadow(color: .black.opacity(kind == .primary && !compact ? 0.3 : 0), radius: 12, y: 6)
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(shape)
+            .pressable(configuration.isPressed, scale: kind == .secondary ? 0.97 : 0.96)
+    }
+
     private var fill: Color {
         switch kind {
-        case .primary: .goldTrim
-        case .secondary: .dusk
-        case .ember: .ember
+        case .primary: .nebulaPurple
+        case .secondary: .clear
+        case .run: .softTeal
         }
     }
 
     private var ink: Color {
-        kind == .secondary ? .starlight : .deepSpace
-    }
-
-    var body: some View {
-        configuration.label
-            .font(compact ? Typeface.caption : Typeface.button)
-            .foregroundStyle(ink)
-            .padding(.horizontal, compact ? Space.m : Space.l)
-            .padding(.vertical, compact ? Space.xs + 2 : Space.s)
-            .background(fill, in: Capsule())
-            .overlay(Capsule().strokeBorder(kind == .secondary ? Color.goldTrim.opacity(0.35) : Color.starlight.opacity(0.25), lineWidth: 1))
-            .shadow(color: (kind == .secondary ? Color.deepSpace : fill).opacity(0.45), radius: configuration.isPressed ? 2 : 8, y: configuration.isPressed ? 1 : 4)
-            .opacity(isEnabled ? 1 : 0.45)
-            .pressable(configuration.isPressed)
+        switch kind {
+        case .primary: .starlight
+        case .secondary: .starlight.opacity(0.7)
+        // Starlight on teal is too low-contrast to read, so Run uses the sky's color.
+        case .run: .deepSpace
+        }
     }
 }
 
@@ -109,7 +129,7 @@ private struct Pressable: ViewModifier {
             .brightness(isPressed ? 0.06 : 0)
             .animation(Motion.press, value: isPressed)
             .onChange(of: isPressed) { _, pressed in
-                if pressed { Feedback.tap() }
+                if pressed { Feedback.tap(.light) }
             }
     }
 }
@@ -120,33 +140,33 @@ extension View {
     }
 }
 
-/// A round icon button for toolbars.
+/// A bare icon button for toolbars, like the back chevron. Always a 44pt tap target.
 struct IconButtonLabel: View {
     let systemName: String
 
     var body: some View {
         Image(systemName: systemName)
-            .font(Typeface.button)
+            .font(Typeface.title)
             .foregroundStyle(Color.starlight)
-            .frame(width: Space.xxl + Space.s, height: Space.xxl + Space.s)
-            .background(Color.dusk, in: Circle())
-            .overlay(Circle().strokeBorder(Color.goldTrim.opacity(0.3), lineWidth: 1))
+            .frame(width: Tap.minimum, height: Tap.minimum)
     }
 }
 
 // MARK: - Background
 
-/// The observatory sky: warm indigo, a lamp glow from below, a faint nebula,
-/// twinkling stars, and a fine grain so it feels printed rather than flat.
+/// The sky: flat deep space (or the splash artwork) with a few slow-twinkling stars.
+/// No gradients, no grain. The stars do the work.
 struct CozyBackground: View {
-    var starCount = 70
-    /// Lays the splash artwork faintly into the sky.
-    var splashOpacity: Double = 0
+    var starCount = 15
+    /// Shows the splash artwork instead of flat deep space.
+    var showsSplash = false
+    /// A black veil over the splash, so busy art doesn't fight what's on top.
+    var dim: Double = 0
 
     var body: some View {
         ZStack {
             Color.deepSpace
-            if splashOpacity > 0 {
+            if showsSplash {
                 // Color.clear takes the screen's size, so the filled image can't stretch the layout.
                 Color.clear
                     .overlay {
@@ -155,27 +175,22 @@ struct CozyBackground: View {
                             .scaledToFill()
                     }
                     .clipped()
-                    .opacity(splashOpacity)
-                    .blendMode(.screen)
+                Color.black.opacity(dim)
             }
-            RadialGradient(colors: [Color.goldTrim.opacity(0.13), .clear], center: .bottom, startRadius: 0, endRadius: 520)
-            RadialGradient(colors: [Color.nebulaBlue.opacity(0.12), .clear], center: .topTrailing, startRadius: 0, endRadius: 480)
             StarfieldView(count: starCount)
-            NoiseOverlay()
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 }
 
-/// Stars in fixed places, each twinkling at its own pace. A few are warm gold.
+/// Small stars in fixed places, each breathing between faint and dim on its own 3-5 second cycle.
 struct StarfieldView: View {
-    var count = 70
+    var count = 15
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Star {
-        let x, y, size, speed, phase: Double
-        let isGold: Bool
+        let x, y, size, period, phase: Double
     }
 
     private var stars: [Star] {
@@ -185,7 +200,7 @@ struct StarfieldView: View {
             return Double(seed >> 11) / Double(1 << 53)
         }
         return (0..<count).map { _ in
-            Star(x: next(), y: next(), size: 1 + next() * 2.2, speed: 0.4 + next() * 1.4, phase: next() * .pi * 2, isGold: next() < 0.18)
+            Star(x: next(), y: next(), size: 1 + next(), period: 3 + next() * 2, phase: next() * .pi * 2)
         }
     }
 
@@ -195,52 +210,26 @@ struct StarfieldView: View {
             let time = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 for star in stars {
-                    let twinkle = reduceMotion ? 0.7 : 0.45 + 0.55 * (0.5 + 0.5 * sin(time * star.speed + star.phase))
+                    let wave = 0.5 + 0.5 * sin(time * 2 * .pi / star.period + star.phase)
+                    context.opacity = reduceMotion ? 0.3 : 0.1 + 0.3 * wave
                     let rect = CGRect(x: star.x * size.width, y: star.y * size.height, width: star.size, height: star.size)
-                    context.opacity = twinkle
-                    context.fill(Circle().path(in: rect), with: .color(star.isGold ? .goldTrim : .starlight))
+                    context.fill(Circle().path(in: rect), with: .color(.starlight))
                 }
             }
         }
-    }
-}
-
-/// A fine film-grain texture, generated once in code.
-struct NoiseOverlay: View {
-    private static let grain: UIImage = {
-        let size = CGSize(width: 96, height: 96)
-        var seed: UInt32 = 7
-        return UIGraphicsImageRenderer(size: size).image { context in
-            for x in 0..<96 {
-                for y in 0..<96 {
-                    seed = seed &* 1_664_525 &+ 1_013_904_223
-                    let value = CGFloat(seed >> 24) / 255
-                    Palette.starlight.withAlphaComponent(value * 0.5).setFill()
-                    context.fill(CGRect(x: x, y: y, width: 1, height: 1))
-                }
-            }
-        }
-    }()
-
-    var body: some View {
-        Image(uiImage: Self.grain)
-            .resizable(resizingMode: .tile)
-            .opacity(0.05)
-            .blendMode(.overlay)
-            .allowsHitTesting(false)
     }
 }
 
 // MARK: - Panels and arrival
 
 extension View {
-    /// A raised surface in the observatory: dusk, a hairline edge, and a soft shadow.
+    /// A card: midnight blue, a hairline edge, and the one soft shadow.
     func cozyPanel(cornerRadius: CGFloat = Radius.large) -> some View {
         background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color.dusk.opacity(0.78))
-                .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(Color.starlight.opacity(0.08), lineWidth: 1))
-                .shadow(color: Color.deepSpace.opacity(0.6), radius: Space.m, y: Space.s)
+                .fill(Color.midnightBlue)
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(Color.starlight.opacity(0.1), lineWidth: 1))
+                .softShadow()
         )
     }
 
@@ -268,41 +257,7 @@ private struct Arrive: ViewModifier {
     }
 }
 
-/// Screen-to-screen: the old screen fades out and the new one rises in.
-extension AnyTransition {
-    static var drift: AnyTransition {
-        .asymmetric(insertion: .opacity.combined(with: .offset(y: Space.xl)), removal: .opacity)
-    }
-}
-
 // MARK: - Progress
-
-/// Mission progress as a little constellation: each finished mission lights a star.
-struct ConstellationProgress: View {
-    let total: Int
-    let completed: Int
-    var starSize: CGFloat = Space.l
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<total, id: \.self) { index in
-                let lit = index < completed
-                SparkleShape()
-                    .fill(lit ? Color.goldTrim : Color.starlight.opacity(0.18))
-                    .frame(width: starSize, height: starSize)
-                    .shadow(color: lit ? Color.goldTrim.opacity(0.8) : .clear, radius: Space.xs)
-                    .rotationEffect(.degrees(Double(index) * 9 - 6))
-                if index < total - 1 {
-                    Rectangle()
-                        .fill(Color.starlight.opacity(index < completed - 1 ? 0.5 : 0.12))
-                        .frame(width: Space.m, height: 1)
-                }
-            }
-        }
-        .accessibilityElement()
-        .accessibilityLabel("\(completed) of \(total) missions complete")
-    }
-}
 
 /// Shows how far through its code the rocket is: a thin orbit line with a spark at the front.
 struct OrbitProgressBar: View {
@@ -326,29 +281,5 @@ struct OrbitProgressBar: View {
         .accessibilityElement()
         .accessibilityLabel("Run progress")
         .accessibilityValue("\(Int(progress * 100)) percent")
-    }
-}
-
-// MARK: - Zoom navigation
-
-extension View {
-    /// Marks a view (like a mission card) as the place a screen zooms out of. iOS 18 and later.
-    @ViewBuilder
-    func zoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
-        if #available(iOS 18.0, *) {
-            matchedTransitionSource(id: id, in: namespace)
-        } else {
-            self
-        }
-    }
-
-    /// Zooms a pushed screen out of its source. On iOS 17 the screen's own arrival animation does the work.
-    @ViewBuilder
-    func zoomTransition(id: some Hashable, in namespace: Namespace.ID) -> some View {
-        if #available(iOS 18.0, *) {
-            navigationTransition(.zoom(sourceID: id, in: namespace))
-        } else {
-            self
-        }
     }
 }

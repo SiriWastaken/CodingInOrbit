@@ -15,7 +15,7 @@ struct OptionsView: View {
 
     var body: some View {
         ZStack {
-            CozyBackground(starCount: 50)
+            CozyBackground(starCount: 0)
 
             VStack(spacing: Space.l) {
                 HStack {
@@ -30,73 +30,60 @@ struct OptionsView: View {
                     Spacer()
 
                     Text("Options")
-                        .font(Typeface.largeTitle)
+                        .font(Typeface.title)
                         .foregroundStyle(Color.starlight)
 
                     Spacer()
 
-                    Button {
+                    Button("Reset") {
                         accessibilityManager.resetToDefaults()
-                    } label: {
-                        IconButtonLabel(systemName: "arrow.counterclockwise")
                     }
+                    .font(Typeface.caption)
+                    .foregroundStyle(Color.starlight.opacity(0.6))
+                    .frame(minWidth: Tap.minimum, minHeight: Tap.minimum)
                     .buttonStyle(PressableButtonStyle())
                     .accessibilityLabel("Reset to defaults")
                 }
                 .padding(.horizontal, Space.l)
                 .padding(.top, Space.l)
-                .arrive(from: -Space.l)
 
                 ScrollView {
-                    VStack(spacing: Space.xl) {
-                        SectionView(title: "How it looks") {
+                    VStack(alignment: .leading, spacing: Space.xl) {
+                        SectionView(title: "Look") {
                             Toggle("Dyslexia-friendly font", isOn: $accessibilityManager.isDyslexicFont)
                             Toggle("High contrast", isOn: $accessibilityManager.isHighContrast)
                             Toggle("Color-blind friendly", isOn: $accessibilityManager.isColorBlindMode)
                         }
-                        .arrive(delay: 0.05)
 
                         SectionView(title: "Sound & touch") {
-                            Toggle("The Guiding Light speaks", isOn: $accessibilityManager.isSpeechEnabled)
+                            Toggle("Read aloud", isOn: $accessibilityManager.isSpeechEnabled)
                             Toggle("Sound effects", isOn: $accessibilityManager.isSoundEnabled)
                             Toggle("Haptics", isOn: $accessibilityManager.isHapticsEnabled)
-
-                            VStack(alignment: .leading, spacing: Space.s) {
+                            HStack {
                                 Text("Voice")
                                     .font(Typeface.body)
                                     .foregroundStyle(Color.starlight)
+                                Spacer()
                                 ChoiceChips(options: speechVoices, selection: $accessibilityManager.speechVoice)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .arrive(delay: 0.1)
 
                         SectionView(title: "Motion") {
                             Toggle("Reduce motion", isOn: $accessibilityManager.isReducedMotion)
                         }
-                        .arrive(delay: 0.15)
 
-                        SectionView(title: "System") {
-                            HStack(spacing: Space.m) {
-                                Image(systemName: accessibilityManager.isVoiceOverRunning ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                                    .foregroundStyle(accessibilityManager.isVoiceOverRunning ? Color.goldTrim : Color.starlight.opacity(0.4))
-                                Text(accessibilityManager.isVoiceOverRunning ? "VoiceOver is on" : "VoiceOver is off")
-                                    .font(Typeface.body)
-                                    .foregroundStyle(Color.starlight)
-                                Spacer()
-                                Button("Open Settings") {
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
-                                }
-                                .buttonStyle(BouncyButtonStyle(kind: .secondary, compact: true))
-                            }
+                        NavigationLink {
+                            CreditsView()
+                        } label: {
+                            Text("Credits")
                         }
-                        .arrive(delay: 0.2)
+                        .buttonStyle(BouncyButtonStyle(kind: .secondary))
                     }
                     .toggleStyle(SpaceToggleStyle())
-                    .padding(.horizontal, Space.l)
+                    .frame(maxWidth: 560)
+                    .padding(.horizontal, Space.xl)
                     .padding(.bottom, Space.xxl)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -105,6 +92,7 @@ struct OptionsView: View {
     }
 }
 
+/// A caption header and plain rows. No card behind it.
 struct SectionView<Content: View>: View {
     let title: String
     let content: Content
@@ -115,72 +103,59 @@ struct SectionView<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(title.uppercased())
                 .font(Typeface.caption)
                 .tracking(2)
-                .foregroundStyle(Color.goldTrim.opacity(0.85))
-                .padding(.leading, Space.xs)
-
-            VStack(spacing: Space.l) {
-                content
-            }
-            .padding(Space.l)
-            .cozyPanel()
+                .foregroundStyle(Color.starlight.opacity(0.4))
+                .padding(.bottom, Space.xs)
+                .accessibilityAddTraits(.isHeader)
+            content
+                .frame(minHeight: Tap.minimum)
         }
     }
 }
 
-/// A switch with a starlit knob. When it's on, the track glows gold and a tiny sparkle appears.
+/// A 50 by 30 switch: purple when on, faint when off. The thumb's side says the state too,
+/// so color is never the only clue.
 struct SpaceToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: Space.m) {
-            configuration.label
-                .font(Typeface.body)
-                .foregroundStyle(Color.starlight)
-            Spacer()
-            Button {
-                Feedback.select()
-                withAnimation(Motion.press) {
-                    configuration.isOn.toggle()
-                }
-            } label: {
+        Button {
+            Feedback.tap(.light)
+            withAnimation(Motion.toggle) { configuration.isOn.toggle() }
+        } label: {
+            HStack(spacing: Space.m) {
+                configuration.label
+                    .font(Typeface.body)
+                    .foregroundStyle(Color.starlight)
+                Spacer()
                 Capsule()
-                    .fill(configuration.isOn ? Color.goldTrim : Color.deepSpace)
-                    .overlay(Capsule().strokeBorder(Color.starlight.opacity(configuration.isOn ? 0 : 0.15), lineWidth: 1))
-                    .frame(width: Space.xxl + Space.l, height: Space.xxl - Space.xs)
-                    .overlay {
+                    .fill(configuration.isOn ? Color.nebulaPurple : Color.starlight.opacity(0.2))
+                    .frame(width: 50, height: 30)
+                    .overlay(alignment: configuration.isOn ? .trailing : .leading) {
                         Circle()
                             .fill(Color.starlight)
-                            .overlay {
-                                SparkleShape()
-                                    .fill(Color.goldTrim)
-                                    .padding(Space.s - 1)
-                                    .opacity(configuration.isOn ? 1 : 0)
-                                    .rotationEffect(.degrees(configuration.isOn ? 0 : -90))
-                            }
-                            .padding(Space.xs - 1)
-                            .shadow(color: Color.deepSpace.opacity(0.4), radius: 2, y: 1)
-                            .offset(x: configuration.isOn ? Space.m - 2 : -(Space.m - 2))
+                            .frame(width: 24, height: 24)
+                            .padding(3)
                     }
-                    .shadow(color: Color.goldTrim.opacity(configuration.isOn ? 0.45 : 0), radius: Space.s)
             }
-            .buttonStyle(PressableButtonStyle(scale: 0.9))
+            .frame(minHeight: Tap.minimum)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAction { configuration.isOn.toggle() }
     }
 }
 
-/// A row of pill-shaped choices, used instead of a stock segmented picker.
+/// A row of words. The chosen one is bright with a gold underline.
 struct ChoiceChips: View {
     let options: [String]
     @Binding var selection: String
 
     var body: some View {
-        HStack(spacing: Space.s) {
+        HStack(spacing: Space.l) {
             ForEach(options, id: \.self) { option in
                 let isSelected = option == selection
                 Button {
@@ -188,14 +163,15 @@ struct ChoiceChips: View {
                     withAnimation(Motion.press) { selection = option }
                 } label: {
                     Text(option)
-                        .font(Typeface.caption)
-                        .foregroundStyle(isSelected ? Color.deepSpace : Color.starlight)
-                        .padding(.horizontal, Space.m)
-                        .padding(.vertical, Space.s)
-                        .background(isSelected ? Color.goldTrim : Color.deepSpace.opacity(0.6), in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.goldTrim.opacity(isSelected ? 0 : 0.3), lineWidth: 1))
+                        .font(Typeface.body)
+                        .foregroundStyle(Color.starlight.opacity(isSelected ? 1 : 0.5))
+                        .padding(.bottom, Space.xs)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Color.goldTrim).frame(height: 2).opacity(isSelected ? 1 : 0)
+                        }
+                        .frame(minHeight: Tap.minimum)
                 }
-                .buttonStyle(PressableButtonStyle())
+                .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }

@@ -12,7 +12,7 @@ import Foundation
 // universe. SpriteKit only draws what happens here; it never decides whether code succeeded.
 //
 // Things depend on each other, and those dependencies are where the learning hides:
-// a moon needs a planet to circle, a rover needs a moon to roll on, and launch() needs
+// a moon needs a planet to circle, a rover needs a moon to roll on, and launch needs
 // something to launch.
 
 /// Which corner of space a mission takes place in. It decides what can exist there
@@ -40,17 +40,18 @@ enum Flight: Equatable, Sendable {
 struct Body: Identifiable, Equatable, Sendable {
     let id: Int
     let thing: Thing
-    var verb: Verb
     /// What this thing belongs to: a moon's or satellite's planet, or the launchpad a rocket sits on.
     var host: Int?
     /// Rockets only.
     var flight: Flight = .grounded
+    /// Which way the rocket points. `move` turns it before it goes.
+    var facing: Direction = .up
     /// How far `move` has bent this rocket away from its spot, in steps.
     var shiftX = 0
     var shiftY = 0
-    /// Rovers and bases that explore() has visited.
+    /// Rovers and bases that explore has visited.
     var explored = false
-    /// A launchpad that launch() built by itself because the rocket had none.
+    /// A launchpad that launch built by itself because the rocket had none.
     var autoBuilt = false
 
     var isRocket: Bool { thing == .rocket }
@@ -109,7 +110,7 @@ struct World: Equatable, Sendable {
 
     /// Makes something exist, if the universe has room and everything it needs.
     @discardableResult
-    mutating func make(_ thing: Thing, verb: Verb, line: Int) throws(CodeError) -> Body {
+    mutating func make(_ thing: Thing, line: Int) throws(CodeError) -> Body {
         guard stage.allowed.contains(thing) else {
             let choices = stage.allowed.map(\.rawValue).joined(separator: ", ")
             throw CodeError(line: line, "\(thing.withArticle.capitalizedFirst) doesn't belong in this corner of space.",
@@ -122,32 +123,32 @@ struct World: Equatable, Sendable {
                             hint: "The universe is getting full. Try making something different.")
         }
 
-        var body = Body(id: nextID, thing: thing, verb: verb)
+        var body = Body(id: nextID, thing: thing)
 
         switch thing {
         case .star where has(.star):
             throw CodeError(line: line, "There's already a star here. One sun is plenty!",
-                            hint: "Planets make great company, though. Try create(planet).")
+                            hint: "Planets make great company, though. Try create planet.")
 
         case .moon where stage == .orbit:
             guard !planets.isEmpty else {
                 throw CodeError(line: line, "A moon needs something to circle.",
-                                hint: "Make a planet first: create(planet).")
+                                hint: "Make a planet first: create planet.")
             }
             guard let host = planets.reversed().first(where: { guests(of: $0.id, .moon) < 3 }) else {
                 throw CodeError(line: line, "Every planet already has all the moons it can hold.",
-                                hint: "Maybe a new planet needs one: create(planet).")
+                                hint: "Maybe a new planet needs one: create planet.")
             }
             body.host = host.id
 
         case .moon where has(.moon):
             throw CodeError(line: line, "There's already a moon here!",
-                            hint: "Two moons would be a lot. You could check first: if not moon { create(moon) }")
+                            hint: "Two moons would be a lot. You could check first: if not moon: create moon")
 
         case .satellite:
             guard !planets.isEmpty else {
                 throw CodeError(line: line, "A satellite needs a planet to circle.",
-                                hint: "Make one first: create(planet).")
+                                hint: "Make one first: create planet.")
             }
             guard let host = planets.reversed().first(where: { guests(of: $0.id, .satellite) < 8 }) else {
                 throw CodeError(line: line, "That planet is wearing every satellite it can.",
@@ -158,7 +159,7 @@ struct World: Equatable, Sendable {
         case .rover, .base:
             guard has(.moon) else {
                 throw CodeError(line: line, "\(thing.withArticle.capitalizedFirst) needs ground to stand on.",
-                                hint: "Make the moon first: create(moon).")
+                                hint: "Make the moon first: create moon.")
             }
 
         case .launchpad:
@@ -184,6 +185,37 @@ struct World: Equatable, Sendable {
         return body
     }
 
+    /// How close a rocket has to come (in steps down toward the surface) before it can land.
+    static let landingDistance = -2
+
+    /// Sets the rocket down on the Moon, but only once it's come close enough.
+    mutating func land(line: Int) throws(CodeError) -> [Int] {
+        guard stage == .moon, has(.moon) else {
+            throw CodeError(line: line, "There's nowhere to land up here.", hint: "Save land for the moon.")
+        }
+        let flying = rockets.filter(\.isFlying)
+        guard !flying.isEmpty else {
+            throw CodeError(line: line, "The rocket isn't flying.", hint: "Every flight starts with launch.")
+        }
+        guard flying.contains(where: { $0.shiftY <= Self.landingDistance }) else {
+            throw CodeError(line: line, "Not yet. You need to get closer to the moon first.")
+        }
+        return landRockets()
+    }
+
+    /// Sets every flying rocket down where it is.
+    mutating func landRockets() -> [Int] {
+        var landed: [Int] = []
+        for index in bodies.indices where bodies[index].isRocket && bodies[index].isFlying {
+            bodies[index].flight = .landed
+            bodies[index].shiftX = 0
+            bodies[index].shiftY = 0
+            bodies[index].facing = .up
+            landed.append(bodies[index].id)
+        }
+        return landed
+    }
+
     mutating func setFlight(id: Int, _ flight: Flight) {
         guard let index = bodies.firstIndex(where: { $0.id == id }) else { return }
         bodies[index].flight = flight
@@ -198,7 +230,7 @@ struct World: Equatable, Sendable {
     /// The Guiding Light uses this to draw ghosts for hints and for `if` checks.
     func preview(_ thing: Thing) -> World? {
         var copy = self
-        guard (try? copy.make(thing, verb: .create, line: 0)) != nil else { return nil }
+        guard (try? copy.make(thing, line: 0)) != nil else { return nil }
         return copy
     }
 
@@ -215,17 +247,17 @@ struct World: Equatable, Sendable {
         guard !grounded.isEmpty else {
             if rockets.isEmpty {
                 throw CodeError(line: line, "There's nothing to launch yet.",
-                                hint: "Rockets don't appear by wishing. Try create(rocket) first.")
+                                hint: "Rockets don't appear by wishing. Try create rocket first.")
             }
             throw CodeError(line: line, "Everything's already up here!",
-                            hint: "launch() works on rockets that are still on the ground.")
+                            hint: "launch works on rockets that are still on the ground.")
         }
 
         var builtPads: [Body] = []
         for rocket in grounded where rocket.host == nil {
             if stage != .launchSite { break }
             guard count(of: .launchpad) < Self.limit(for: .launchpad) else { continue }
-            var pad = Body(id: nextID, thing: .launchpad, verb: .build)
+            var pad = Body(id: nextID, thing: .launchpad)
             pad.autoBuilt = true
             nextID += 1
             bodies.append(pad)
@@ -247,15 +279,15 @@ struct World: Equatable, Sendable {
     }
 
     /// Puts every flying rocket into orbit around the newest planet. If there's no planet
-    /// to circle, orbit() makes one: you can't orbit nothing.
+    /// to circle, orbit makes one: you can't orbit nothing.
     mutating func orbitAll(line: Int) throws(CodeError) -> Orbit {
         guard !rockets.isEmpty else {
             throw CodeError(line: line, "There's no rocket to put in orbit.",
-                            hint: "Try create(rocket) and launch() first.")
+                            hint: "Try create rocket and launch first.")
         }
         guard rockets.contains(where: \.isFlying) else {
             throw CodeError(line: line, "The rocket's still on the ground.",
-                            hint: "Orbits start in the sky. Try launch() first.")
+                            hint: "Orbits start in the sky. Try launch first.")
         }
         guard stage.allowed.contains(.planet) else {
             throw CodeError(line: line, "There's nothing to circle in this corner of space.",
@@ -264,7 +296,7 @@ struct World: Equatable, Sendable {
 
         var createdPlanet = false
         if planets.isEmpty {
-            try make(.planet, verb: .create, line: line)
+            try make(.planet, line: line)
             createdPlanet = true
         }
         guard let planet = planets.last else { throw CodeError(line: line, "Something odd happened.") }
@@ -294,15 +326,15 @@ struct World: Equatable, Sendable {
         }
         guard has(.moon) else {
             throw CodeError(line: line, "There's no moon to explore!",
-                            hint: "Try create(moon) before explore().")
+                            hint: "Try create moon before explore.")
         }
         guard has(.rover) else {
             throw CodeError(line: line, "Who's going to explore? There's no rover.",
-                            hint: "Try spawn(rover) before explore().")
+                            hint: "Try create rover before explore.")
         }
         guard has(.base) else {
             throw CodeError(line: line, "The rover has nothing to find out there.",
-                            hint: "Give it somewhere to go: build(base).")
+                            hint: "Give it somewhere to go: create base.")
         }
 
         var landed: [Int] = []
@@ -324,13 +356,13 @@ struct World: Equatable, Sendable {
     /// Bends space around every flying rocket, nudging it one step.
     mutating func move(_ direction: Direction, line: Int) throws(CodeError) -> [Int] {
         guard !rockets.isEmpty else {
-            throw CodeError(line: line, "There's no rocket to move.", hint: "Try create(rocket) first.")
+            throw CodeError(line: line, "There's no rocket to move.", hint: "Try create rocket first.")
         }
         let flying = rockets.filter { $0.isFlying && $0.flight != .landed }
         guard !flying.isEmpty else {
-            throw CodeError(line: line, "The rocket's not flying yet.", hint: "Every flight starts with launch().")
+            throw CodeError(line: line, "The rocket's not flying yet.", hint: "Every flight starts with launch.")
         }
-        let span = 2
+        let span = 4
         var moved: [Int] = []
         for rocket in flying {
             if case .orbiting = rocket.flight { continue }
@@ -342,11 +374,12 @@ struct World: Equatable, Sendable {
             }
             bodies[index].shiftX = x
             bodies[index].shiftY = y
+            bodies[index].facing = direction
             moved.append(rocket.id)
         }
         guard !moved.isEmpty else {
             throw CodeError(line: line, "A rocket in orbit follows its planet around.",
-                            hint: "move() is for rockets that are flying free.")
+                            hint: "move is for rockets that are flying free.")
         }
         return moved
     }

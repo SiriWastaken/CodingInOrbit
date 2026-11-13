@@ -10,7 +10,7 @@ import simd
 
 // A faint grid that fills the sky, like the stretchy sheet in every gravity diagram.
 // Heavy things (a sun, a planet, the Moon) pull the grid toward them. When the rocket
-// moves, a ripple spreads through it. That's what "move() bends space" looks like.
+// moves, a ripple spreads through it. That's what "move bends space" looks like.
 //
 // It's one sprite with a grid texture, bent by SpriteKit's warp geometry. No physics.
 

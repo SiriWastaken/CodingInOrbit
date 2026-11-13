@@ -19,41 +19,47 @@ enum GuideMood: Equatable {
 
 enum GuideVoice {
     static let running = [
-        "Here we go! I have no idea what's about to appear. Watch the glowing line.",
-        "Ooh, ooh. Let's see what your words make out here.",
-        "Fingers crossed! Keep an eye on the highlighted line."
+        "3... 2... 1... go!",
+        "Engines humming. Watch the glowing line!",
+        "Here we go. I can't look. Okay, I'm looking."
     ]
 
-    static let emptyCode = "Nothing to run yet! Try tapping a block below, or type create(launchpad). I'm curious what happens."
-    static let editorPlaceholder = "Type a command. Words make things here."
-    static let allBlocksUsed = "Look at you go! You've used every block I gave you."
-    static let tenthCommand = "That's your 10th command! Look how much exists now that didn't before."
-    static let freshStart = "Fresh start! A blank page is the bravest place to begin."
-    static let firstMistake = "Hmm, that didn't work. Neither of us knew it wouldn't, though. That's how we find things out."
-    static let nothingLeftToTry = "I think everything we were looking for is already here! Want to see what else we can make?"
+    /// Free play: the Guiding Light mostly stays quiet.
+    static let whispers = ["Whoa.", "Gorgeous.", "Do another!", "I love that.", "Ooh."]
+
+    static let finale = "You've done it, Commander. The world is yours. Build something great."
+    static let emptyCode = "The sky's empty! Tap a block below and let's fill it."
+    static let editorPlaceholder = "Type a command…"
+    static let allBlocksUsed = "You've used every block! You're officially dangerous."
+    static let tenthCommand = "10 commands! The Apollo computer had less memory than a calculator, and it still got to the Moon."
+    static let freshStart = "Clean slate. Every universe starts empty."
+    static let firstMistake = "Ooh, a bug! The very first computer bug was a real moth, stuck inside a computer in 1947."
+    static let nothingLeftToTry = "It's all here! Want to go wild and add something extra?"
 
     // MARK: Reactions to new things
 
-    /// Said the first time each kind of thing appears. The Guiding Light is just as surprised as you.
+    /// Said the first time each kind of thing appears: one real fact from space, fast.
     static func reaction(to body: Body) -> String {
         switch body.thing {
-        case .launchpad: "A launchpad! It just... appeared. I didn't know words could do that."
-        case .rocket: "Oh, a rocket! It looks so happy to be here."
-        case .star: "A star! I can feel the warmth from here. Isn't that something?"
-        case .planet: "A whole planet. From one line! I'm a little dizzy."
-        case .moon: "A moon! Look at it, it knows exactly which way to circle."
-        case .satellite: "Ooh, a satellite. It's blinking at us."
-        case .asteroid: "An asteroid, just drifting by. I hope it's friendly."
-        case .comet: "A comet! Quick, make a wish."
-        case .rover: "A little rover! It's already looking around."
-        case .base: "A base! Those windows look like they're waiting for someone to visit."
+        case .launchpad: "A launchpad! Real ones spray a flood of water during liftoff, just to soak up the noise."
+        case .rocket: "A rocket! The Saturn V burned 20 tons of fuel every second. Ours runs on words."
+        case .star: "A star! You could fit 1.3 million Earths inside our Sun."
+        case .planet: "A whole planet, from one line! A day on Venus is longer than its year. True story."
+        case .moon: "A moon! Ours drifts about 4 cm farther from Earth every year. Wave while you can."
+        case .satellite: "A satellite! The space station laps Earth every 90 minutes. That's 16 sunrises a day."
+        case .asteroid: "An asteroid! Some are solid metal. Floating treasure."
+        case .comet: "A comet! Its tail always points away from the Sun, even when it's leaving. Make a wish!"
+        case .rover: "A rover! Curiosity once hummed Happy Birthday to itself on Mars. Ours has us."
+        case .base: "A base! Apollo astronauts said moon dust smells like burnt gunpowder. Keep the door shut."
         }
     }
 
-    static let liftoff = "Liftoff! I felt that one all the way through my glow."
-    static let orbiting = "It's circling! Did you see how it found its way around?"
-    static let orbitMadeAPlanet = "Wait, there wasn't a planet, so orbit() made one? Of course it did. You can't circle nothing!"
-    static let exploring = "The rover found the base! I wonder what they're saying to each other."
+    static let liftoff = "Nice one! We have liftoff."
+    static let askName = "Before we fly: what should we call your rocket?"
+    static let freePlayHelp = "Try create planet, then repeat 3 times: create satellite. Or anything else!"
+    static let orbiting = "We're orbiting! Fun fact: an orbit is just falling... and missing the ground, forever."
+    static let orbitMadeAPlanet = "Wait, there wasn't a planet, so orbit made one? Of course it did. You can't circle nothing!"
+    static let exploring = "You made it. Touchdown."
 
     // MARK: Easter eggs
 

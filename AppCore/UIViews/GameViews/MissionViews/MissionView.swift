@@ -13,10 +13,11 @@ import SpriteKit
 struct MissionView: View {
     @EnvironmentObject private var accessibilityManager: AccessibilityManager
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(MissionProgress.storageKey) private var completedMissions = ""
     @State private var session: GameSession
-    @State private var isEditorFocused = false
+    /// Set a few seconds after the last lesson is won.
+    @State private var showsEnding = false
 
     init(mission: Mission) {
         _session = State(initialValue: GameSession(mission: mission))
@@ -30,22 +31,46 @@ struct MissionView: View {
         VStack(spacing: 0) {
             header
             GeometryReader { geometry in
-                let isWide = geometry.size.width > geometry.size.height
+                // Side by side when there's room (a regular-width size class, or any wide window).
+                let isWide = sizeClass == .regular || geometry.size.width > geometry.size.height
                 let layout = isWide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                 layout {
                     if isWide {
                         workspace.frame(width: geometry.size.width * 0.45)
-                        stage
+                        stage.ignoresSafeArea(.keyboard)
                     } else {
-                        stage.frame(height: geometry.size.height * 0.48)
+                        stage.frame(height: geometry.size.height * 0.48).ignoresSafeArea(.keyboard)
                         workspace
                     }
                 }
             }
         }
+        .overlay {
+            if showsEnding {
+                EndingView(onBuildAnything: { switchTo(.freePlay) }, onBackToStart: { dismiss() })
+                    .transition(.opacity.combined(with: .scale(scale: 1.05)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: showsEnding)
+        // After a win, the reward plays out on stage for a few seconds. Then the Moon rolls
+        // the ending, and the other lessons head back to the carousel with the next one unlocked.
+        .task(id: session.result) {
+            guard session.result?.succeeded == true else { return }
+            if session.mission.id == .moon {
+                // Touchdown, then the astronaut's walk (about 3.5s), the Guiding Light's last word, and the ending.
+                guard (try? await Task.sleep(for: .seconds(3.6))) != nil else { return }
+                session.sayFinale()
+                guard (try? await Task.sleep(for: .seconds(1.8))) != nil else { return }
+                showsEnding = true
+                session.celebrateEnding()
+            } else {
+                guard (try? await Task.sleep(for: .seconds(2))) != nil else { return }
+                dismiss()
+            }
+        }
         .id(session.mission.id)
-        .transition(.drift)
-        .background(CozyBackground(starCount: 40))
+        .transition(.opacity)
+        .background(CozyBackground(starCount: 20))
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -60,68 +85,38 @@ struct MissionView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Top bar
 
+    /// Just quiet icons: back to the lessons, start over, and the gear for Options.
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: Space.m) {
+        HStack(spacing: Space.s) {
             Button {
                 dismiss()
             } label: {
                 IconButtonLabel(systemName: "chevron.left")
             }
             .buttonStyle(PressableButtonStyle())
-            .accessibilityLabel("Back to missions")
+            .accessibilityLabel("Back")
 
             Spacer()
-
-            VStack(spacing: Space.xs) {
-                Text("MISSION \(session.mission.number) · \(session.mission.concept.uppercased())")
-                    .font(Typeface.caption)
-                    .tracking(2)
-                    .foregroundStyle(Color.starlight.opacity(0.55))
-                Text(session.mission.title)
-                    .font(Typeface.title)
-                    .foregroundStyle(Color.starlight)
-                ConstellationProgress(total: Mission.all.count,
-                                      completed: MissionProgress.completedIDs(from: completedMissions).count,
-                                      starSize: Space.m)
-            }
-            .accessibilityElement(children: .combine)
-
-            Spacer()
-
-            Menu {
-                Picker("Speed", selection: $session.speed) {
-                    ForEach(RunSpeed.allCases) { speed in
-                        Label(speed.title, systemImage: speed.icon).tag(speed)
-                    }
-                }
-            } label: {
-                IconButtonLabel(systemName: session.speed.icon)
-            }
-            .menuStyle(.button)
-            .buttonStyle(PressableButtonStyle())
-            .accessibilityLabel("Run speed")
-            .accessibilityValue(session.speed.title)
-
-            Menu {
-                Button("Reset Universe", systemImage: "arrow.counterclockwise") {
-                    session.stop()
-                }
-                Button("Restore Starter Code", systemImage: "doc.badge.arrow.up", role: .destructive) {
-                    session.restoreStarterCode()
-                }
+            Button {
+                session.restoreStarterCode()
             } label: {
                 IconButtonLabel(systemName: "arrow.counterclockwise")
             }
-            .menuStyle(.button)
             .buttonStyle(PressableButtonStyle())
-            .accessibilityLabel("Reset")
+            .accessibilityLabel("Start over")
+
+            NavigationLink {
+                OptionsView()
+            } label: {
+                IconButtonLabel(systemName: "gearshape")
+            }
+            .buttonStyle(PressableButtonStyle())
+            .accessibilityLabel("Options")
         }
         .padding(.horizontal, Space.l)
-        .padding(.vertical, Space.s)
-        .arrive(from: -Space.l)
     }
 
     // MARK: - Workspace
@@ -129,17 +124,6 @@ struct MissionView: View {
     @ViewBuilder
     private var workspace: some View {
         VStack(spacing: 0) {
-            GuidingLightView(
-                message: session.guideMessage,
-                mood: session.guideMood,
-                canAdvance: session.hasMoreBriefing,
-                onAdvance: { session.advanceBriefing() },
-                onHint: { session.showHint() },
-                onSpeak: { session.repeatGuide() }
-            )
-            .padding(Space.m)
-            .arrive(delay: 0.05)
-
             CodeEditorView(
                 code: $session.code,
                 activeLine: session.activeLine,
@@ -150,17 +134,11 @@ struct MissionView: View {
                 bridge: session.editor,
                 onEdit: { session.codeDidChange() },
                 onLineTapped: { session.selectLine($0) },
-                onFocusChange: { focused in isEditorFocused = focused }
+                onFocusChange: { _ in }
             )
-            .clipShape(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
-            // The editor glows softly while you're typing in it.
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
-                    .strokeBorder(isEditorFocused ? Color.goldTrim.opacity(0.6) : Color.starlight.opacity(0.08), lineWidth: isEditorFocused ? 1.5 : 1)
-            )
-            .shadow(color: Color.goldTrim.opacity(isEditorFocused ? 0.25 : 0), radius: Space.m)
-            .animation(.easeInOut(duration: 0.3), value: isEditorFocused)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
             .padding(.horizontal, Space.m)
+            .padding(.top, Space.m)
             .padding(.bottom, Space.s)
             .arrive(delay: 0.12)
 
@@ -174,6 +152,7 @@ struct MissionView: View {
             )
             .arrive(delay: 0.2)
         }
+        .background(Color.midnightBlue)
     }
 
     // MARK: - Stage
@@ -187,10 +166,12 @@ struct MissionView: View {
                 .accessibilityValue(session.stageDescription)
                 .accessibilityAddTraits(.updatesFrequently)
 
-            GoalChecklistView(goals: session.mission.goals, met: session.metGoals)
-                .padding(Space.m)
-                .padding(.top, Space.l)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if !session.mission.goals.isEmpty {
+                GoalChecklistView(goals: session.mission.goals, met: session.metGoals)
+                    .padding(Space.m)
+                    .padding(.top, Space.l)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
 
             if session.isRunning || session.result != nil {
                 OrbitProgressBar(progress: session.runProgress)
@@ -200,17 +181,20 @@ struct MissionView: View {
                     .transition(.opacity)
             }
 
-            if let result = session.result {
-                MissionResultView(
-                    result: result,
-                    isMoonMission: session.mission.id == .toTheMoon,
-                    nextMission: session.mission.next,
-                    onTryAgain: { session.stop() },
-                    onNext: { goToNextMission() }
-                )
-                .padding(Space.l)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            GuidingLightView(
+                message: session.guideMessage,
+                mood: session.guideMood,
+                canAdvance: session.hasMoreBriefing,
+                canHint: !session.isFreePlay && !session.needsRocketName,
+                asksForName: session.needsRocketName,
+                onName: { session.nameRocket($0) },
+                onAdvance: { session.advanceBriefing() },
+                onHint: { session.showHint() },
+                onSpeak: { session.repeatGuide() }
+            )
+            .padding(Space.m)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .arrive(delay: 0.05)
         }
         .clipShape(RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
         .padding(Space.s)
@@ -218,12 +202,12 @@ struct MissionView: View {
         .animation(.easeInOut(duration: 0.3), value: session.isRunning)
     }
 
-    private func goToNextMission() {
-        guard let next = session.mission.next else { return }
+    private func switchTo(_ next: Mission) {
+        showsEnding = false
         session.leave()
         let nextSession = GameSession(mission: next)
         nextSession.settings = settings
-        withAnimation(systemReduceMotion ? .easeOut(duration: 0.2) : Motion.arrive) {
+        withAnimation(.easeInOut(duration: 0.3)) {
             session = nextSession
         }
         nextSession.start()

@@ -18,26 +18,15 @@ import Observation
 //
 // Stopping cancels the replay task, so the universe stops growing right away.
 
-enum RunSpeed: String, CaseIterable, Identifiable {
+enum RunSpeed {
     case slow, normal, fast
-
-    var id: Self { self }
-    var title: String { rawValue.capitalized }
-
-    var icon: String {
-        switch self {
-        case .slow: "tortoise.fill"
-        case .normal: "figure.walk"
-        case .fast: "hare.fill"
-        }
-    }
 
     /// Seconds for one move.
     var stepDuration: Double {
         switch self {
-        case .slow: 1.0
-        case .normal: 0.6
-        case .fast: 0.3
+        case .slow: 0.6
+        case .normal: 0.3
+        case .fast: 0.15
         }
     }
 }
@@ -98,7 +87,12 @@ final class GameSession {
     /// Commands the rocket has carried out since the app opened, across every mission.
     private static var lifetimeCommands = 0
 
+    /// True until the player names their rocket (asked once, at the very start).
+    private(set) var needsRocketName: Bool
+    static let rocketNameKey = "rocketName"
+
     var isRunning: Bool { phase == .running }
+    var isFreePlay: Bool { mission.id == .freePlay }
     var hasMoreBriefing: Bool { briefingIndex < mission.briefing.count - 1 }
 
     var result: MissionResult? {
@@ -114,9 +108,12 @@ final class GameSession {
     init(mission: Mission) {
         self.mission = mission
         self.code = mission.starterCode
-        // The first universe starts the way the briefing says it will.
-        self.world = mission.makeWorld(seed: UInt64.random(in: .min ... .max), gentle: true)
-        self.guideMessage = mission.briefing.first ?? ""
+        self.world = mission.makeWorld()
+        let name = UserDefaults.standard.string(forKey: Self.rocketNameKey) ?? ""
+        let briefing = mission.briefing.first ?? ""
+        let needsName = mission.id == .liftoff && name.isEmpty
+        self.needsRocketName = needsName
+        self.guideMessage = needsName ? GuideVoice.askName : (name.isEmpty ? briefing : "Hey, \(name)! \(briefing)")
         self.scene = CosmosScene(size: CGSize(width: 600, height: 600))
         scene.onThingTapped = { [weak self] line in self?.selectLine(line) }
     }
@@ -138,10 +135,29 @@ final class GameSession {
 
     // MARK: - The Guiding Light
 
+    func nameRocket(_ raw: String) {
+        let name = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+        guard !name.isEmpty else { return }
+        UserDefaults.standard.set(name, forKey: Self.rocketNameKey)
+        needsRocketName = false
+        setGuide("Welcome, \(name)! \(mission.briefing.first ?? "")", mood: .delighted)
+    }
+
     func advanceBriefing() {
         guard hasMoreBriefing else { return }
         briefingIndex += 1
         setGuide(mission.briefing[briefingIndex])
+    }
+
+    /// Said once the astronaut has hopped for joy, just before the ending.
+    func sayFinale() {
+        setGuide(GuideVoice.finale, mood: .delighted)
+    }
+
+    /// The ending's fanfare.
+    func celebrateEnding() {
+        sound.play(.success, enabled: settings.sound)
+        haptics.play(.success, enabled: settings.haptics)
     }
 
     func repeatGuide() {
@@ -202,8 +218,8 @@ final class GameSession {
     private func cheerIfAllBlocksUsed() {
         guard !hasCheeredAllBlocks, mission.blocks.count > 1 else { return }
         let markers: [BlockKind: String] = [
-            .create: "create(", .build: "build(", .spawn: "spawn(", .summon: "summon(", .launch: "launch(",
-            .orbit: "orbit(", .explore: "explore(", .move: "move(", .repeatLoop: "repeat", .condition: "if "
+            .create: "create", .launch: "launch", .land: "land",
+            .orbit: "orbit", .explore: "explore", .move: "move", .repeatLoop: "repeat", .condition: "if "
         ]
         let usedAll = mission.blocks.allSatisfy { kind in markers[kind].map { code.contains($0) } ?? true }
         guard usedAll else { return }
@@ -236,6 +252,7 @@ final class GameSession {
             lastWorld = trace.finalWorld
             phase = .running
             setGuide(GuideVoice.pick(GuideVoice.running), mood: .curious, speak: false)
+            scene.shiverRockets()
             runTask = Task { [weak self] in
                 await self?.play(trace, program: program)
             }
@@ -265,8 +282,7 @@ final class GameSession {
 
     private func resetStage(newField: Bool) {
         if newField {
-            world = mission.makeWorld(seed: UInt64.random(in: .min ... .max))
-            if let note = mission.arrivalNote(for: world) { setGuide(note, mood: .curious, speak: false) }
+            world = mission.makeWorld(surprise: true)
         }
         fieldIsFresh = true
         scene.load(world)
@@ -306,7 +322,15 @@ final class GameSession {
             fieldIsFresh = true
             return
         }
-        finish(with: mission.evaluate(trace, program: program))
+        let result = mission.evaluate(trace, program: program)
+        // Free play has no win or loss. Only mistakes get a card; everything else gets a whisper.
+        if isFreePlay && result.succeeded {
+            phase = .editing
+            runProgress = 0
+            setGuide(GuideVoice.pick(GuideVoice.whispers), mood: .delighted, speak: false)
+            return
+        }
+        finish(with: result)
     }
 
     /// The Guiding Light reacts out loud-ish (text only) as new things appear, as surprised as you are.
@@ -315,7 +339,8 @@ final class GameSession {
         case .created(let body):
             countCommand()
             if seenThings.insert(body.thing).inserted {
-                setGuide(GuideVoice.reaction(to: body), mood: .delighted, speak: false)
+                scene.spinRockets()
+                if !isFreePlay { setGuide(GuideVoice.reaction(to: body), mood: .delighted, speak: false) }
             }
         case .launched:
             countCommand()
@@ -352,6 +377,8 @@ final class GameSession {
             isSuitedUp = true
         case .stargaze:
             setGuide(GuideVoice.stargaze, mood: .delighted)
+        case .help:
+            setGuide(mission.nextStep(in: world)?.text ?? GuideVoice.freePlayHelp, mood: .curious)
         }
     }
 
@@ -360,12 +387,14 @@ final class GameSession {
         runTask = nil
         runProgress = 1
         if result.succeeded {
+            playReward()
             scene.celebrate()
             haptics.play(.success, enabled: settings.haptics)
             sound.play(.success, enabled: settings.sound)
             MissionProgress.markCompleted(mission.id)
         } else {
-            errorLine = result.line
+            flashErrorLine(result.line)
+            scene.playConfused()
             hasMadeMistake = true
             haptics.play(.error, enabled: settings.haptics)
             sound.play(.error, enabled: settings.sound)
@@ -373,12 +402,36 @@ final class GameSession {
         setGuide(result.reflection ?? result.message, mood: result.succeeded ? .delighted : .concerned)
     }
 
+    /// Each lesson's win ends with the real thing: a full orbit around Earth, or a Moon landing.
+    private func playReward() {
+        guard var reward = lastWorld else { return }
+        switch mission.id {
+        case .orbit:
+            guard let orbit = try? reward.orbitAll(line: 0) else { return }
+            scene.play(StepEvent(line: 0, kind: .orbited(planet: orbit.planet, rockets: orbit.rockets, createdPlanet: false), world: reward), duration: 1.5)
+        case .moon:
+            // The rocket has already landed; now the astronaut steps out.
+            scene.playAstronaut()
+        case .liftoff, .freePlay:
+            break
+        }
+    }
+
+    /// The broken line glows teal for a moment, then lets go.
+    private func flashErrorLine(_ line: Int?) {
+        errorLine = line
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.6))
+            if self?.errorLine == line { self?.errorLine = nil }
+        }
+    }
+
     private func report(_ error: CodeError) {
-        errorLine = error.line
+        flashErrorLine(error.line)
         // The very first slip of the session gets a little reassurance first.
         let opener = hasMadeMistake ? "" : GuideVoice.firstMistake + " "
         hasMadeMistake = true
-        setGuide("\(opener)Line \(error.line): \(error.explanation)", mood: .concerned)
+        setGuide(opener + error.explanation, mood: .concerned)
         haptics.play(.error, enabled: settings.haptics)
         sound.play(.error, enabled: settings.sound)
         scene.play(StepEvent(line: error.line, kind: .runtimeError(error), world: world), duration: 0.5)
@@ -403,12 +456,7 @@ final class GameSession {
         switch event.kind {
         case .created(let body):
             haptics.play(.pop, enabled: settings.haptics)
-            let cue: SoundCue = switch body.verb {
-            case .create, .spawn: .pop
-            case .build: .moveSide
-            case .summon: .sparkle
-            }
-            sound.play(cue, pan: pan(body.id), enabled: settings.sound)
+            sound.play(.pop, pan: pan(body.id), enabled: settings.sound)
         case .launched(let rockets):
             haptics.play(.launch, enabled: settings.haptics)
             sound.play(.launch, pan: pan(rockets.first), enabled: settings.sound)

@@ -31,20 +31,6 @@ struct SparkleShape: Shape {
     }
 }
 
-/// A crescent moon, a little lopsided.
-struct CrescentShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let radius = min(rect.width, rect.height) / 2
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        var path = Path()
-        path.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 1.96))
-        path.addEllipse(in: CGRect(x: center.x - radius * 0.45, y: center.y - radius * 1.08, width: radius * 1.8, height: radius * 1.8))
-        // Fill with an even-odd rule so the second circle cuts the crescent out of the first.
-        return path
-    }
-}
-
-/// A small rocket outline, drawn the way you'd doodle one in a notebook margin.
 struct RocketGlyph: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width, h = rect.height
@@ -75,32 +61,3 @@ struct RocketGlyph: Shape {
 }
 
 /// A planet with a tilted ring that doesn't quite close, like a quick sketch.
-struct OrbitGlyph: Shape {
-    func path(in rect: CGRect) -> Path {
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let size = min(rect.width, rect.height)
-        var path = Path()
-        path.addEllipse(in: CGRect(x: center.x - size * 0.22, y: center.y - size * 0.22, width: size * 0.44, height: size * 0.43))
-        var ring = Path()
-        ring.addArc(center: .zero, radius: size * 0.46, startAngle: .degrees(-160), endAngle: .degrees(170), clockwise: false)
-        let squash = CGAffineTransform(scaleX: 1, y: 0.38).rotated(by: -.pi / 9).concatenating(CGAffineTransform(translationX: center.x, y: center.y))
-        path.addPath(ring, transform: squash)
-        return path
-    }
-}
-
-/// Picks the hand-drawn icon for each mission.
-struct MissionGlyph: View {
-    let mission: MissionID
-
-    var body: some View {
-        switch mission {
-        case .liftoff:
-            RocketGlyph().stroke(Color.starlight, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-        case .lowEarthOrbit:
-            OrbitGlyph().stroke(Color.starlight, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-        case .toTheMoon:
-            CrescentShape().fill(Color.starlight, style: FillStyle(eoFill: true))
-        }
-    }
-}

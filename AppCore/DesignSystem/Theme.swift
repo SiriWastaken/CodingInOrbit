@@ -8,35 +8,35 @@
 import SwiftUI
 import UIKit
 
-// The look of Coding In Orbit: a cozy observatory at night, not a control room.
-// Every color, font, and gap in the app comes from this file. If something on screen
-// looks off, the fix belongs here, not in a one-off literal.
+// The design system: a cozy observatory at night, not a control room.
+// Every color, font, gap, corner, and shadow in the app comes from this file.
+// If something on screen looks off, the fix belongs here, not in a one-off literal.
 
 // MARK: - Palette
 
-/// Six colors, and only six. Lighter or darker versions come from mixing these together.
+/// Six colors, and only six. Each one has a single job.
 enum Palette {
-    /// The night sky behind everything. A warm, inky indigo instead of pure black.
-    static let deepSpace = UIColor(red: 0.09, green: 0.08, blue: 0.17, alpha: 1)
-    /// Raised surfaces: panels, cards, the editor. Like the wooden walls of an observatory at dusk.
-    static let dusk = UIColor(red: 0.17, green: 0.15, blue: 0.28, alpha: 1)
-    /// Text and the brightest stars. Warm, like candlelight on paper.
-    static let starlight = UIColor(red: 0.97, green: 0.93, blue: 0.86, alpha: 1)
-    /// The Guiding Light, success, and the Run button. Brass and lamplight.
-    static let goldTrim = UIColor(red: 0.96, green: 0.75, blue: 0.38, alpha: 1)
-    /// Calm and curious: the rocket's trail, the "all clear" sensor, commands in code.
-    static let nebulaBlue = UIColor(red: 0.56, green: 0.65, blue: 0.96, alpha: 1)
-    /// Warmth and warnings: the rocket's paint, asteroids ahead, gentle errors.
-    static let ember = UIColor(red: 0.93, green: 0.50, blue: 0.41, alpha: 1)
+    /// Backgrounds. The night sky behind everything.
+    static let deepSpace = UIColor(red: 0.039, green: 0.055, blue: 0.102, alpha: 1)   // #0A0E1A
+    /// Backgrounds. Panels, cards, the workspace.
+    static let midnightBlue = UIColor(red: 0.078, green: 0.106, blue: 0.180, alpha: 1) // #141B2E
+    /// Text, always. Dim it with opacity, never with another color.
+    static let starlight = UIColor(red: 0.961, green: 0.941, blue: 0.882, alpha: 1)    // #F5F0E1
+    /// Accent: the Guiding Light, celebration, and gentle warnings.
+    static let goldTrim = UIColor(red: 0.831, green: 0.686, blue: 0.216, alpha: 1)     // #D4AF37
+    /// Accent: anything you can press to move forward.
+    static let nebulaPurple = UIColor(red: 0.424, green: 0.169, blue: 0.851, alpha: 1) // #6C2BD9
+    /// Success, and Run.
+    static let softTeal = UIColor(red: 0.290, green: 0.608, blue: 0.557, alpha: 1)     // #4A9B8E
 }
 
 extension Color {
     static let deepSpace = Color(uiColor: Palette.deepSpace)
-    static let dusk = Color(uiColor: Palette.dusk)
+    static let midnightBlue = Color(uiColor: Palette.midnightBlue)
     static let starlight = Color(uiColor: Palette.starlight)
     static let goldTrim = Color(uiColor: Palette.goldTrim)
-    static let nebulaBlue = Color(uiColor: Palette.nebulaBlue)
-    static let ember = Color(uiColor: Palette.ember)
+    static let nebulaPurple = Color(uiColor: Palette.nebulaPurple)
+    static let softTeal = Color(uiColor: Palette.softTeal)
 }
 
 extension UIColor {
@@ -53,52 +53,45 @@ extension UIColor {
 
 // MARK: - Typography
 
-/// Two typefaces. New York (the system serif) is the storyteller: titles and the
-/// Guiding Light's voice. SF Mono is the engineer: code, labels, and small print.
-/// Every size follows Dynamic Type.
+/// Two families: New York (the system serif) for headings, SF Pro for reading, plus SF Mono
+/// for code. Six sizes, each scaled with Dynamic Type from its base point size.
 enum Typeface {
     private static var prefersEasyReading: Bool {
         UserDefaults.standard.bool(forKey: "isDyslexicFont")
     }
 
-    /// Serif normally. Rounded when the dyslexia-friendly option is on (or OpenDyslexic, if bundled).
-    private static func story(_ style: Font.TextStyle) -> Font {
-        guard prefersEasyReading else { return .system(style, design: .serif) }
-        if UIFont(name: "OpenDyslexic", size: 17) != nil {
-            return .custom("OpenDyslexic", size: UIFont.preferredFont(forTextStyle: style.uiKit).pointSize, relativeTo: style)
-        }
-        return .system(style, design: .rounded)
+    private static func scaled(_ size: CGFloat, like style: UIFont.TextStyle) -> CGFloat {
+        UIFontMetrics(forTextStyle: style).scaledValue(for: size)
     }
 
-    static var largeTitle: Font { story(.largeTitle).weight(.bold) }
-    static var title: Font { story(.title2).weight(.semibold) }
-    static var body: Font { story(.body) }
-    static var button: Font { story(.body).weight(.semibold) }
-    static var caption: Font { .system(.caption, design: .monospaced).weight(.medium) }
-    static var code: Font { .system(.body, design: .monospaced) }
-}
-
-private extension Font.TextStyle {
-    var uiKit: UIFont.TextStyle {
-        switch self {
-        case .largeTitle: .largeTitle
-        case .title: .title1
-        case .title2: .title2
-        case .title3: .title3
-        case .headline: .headline
-        case .subheadline: .subheadline
-        case .callout: .callout
-        case .footnote: .footnote
-        case .caption: .caption1
-        case .caption2: .caption2
-        default: .body
-        }
+    /// Serif normally. Rounded (or OpenDyslexic, if bundled) when the dyslexia-friendly option is on.
+    private static func heading(_ size: CGFloat, _ weight: Font.Weight, like style: UIFont.TextStyle) -> Font {
+        let points = scaled(size, like: style)
+        guard prefersEasyReading else { return .system(size: points, weight: weight, design: .serif) }
+        if UIFont(name: "OpenDyslexic", size: points) != nil { return .custom("OpenDyslexic", fixedSize: points) }
+        return .system(size: points, weight: weight, design: .rounded)
     }
+
+    private static func reading(_ size: CGFloat, _ weight: Font.Weight, like style: UIFont.TextStyle) -> Font {
+        let points = scaled(size, like: style)
+        guard prefersEasyReading else { return .system(size: points, weight: weight) }
+        if UIFont(name: "OpenDyslexic", size: points) != nil { return .custom("OpenDyslexic", fixedSize: points) }
+        return .system(size: points, weight: weight, design: .rounded)
+    }
+
+    static var hero: Font { heading(56, .bold, like: .largeTitle) }
+    static var largeTitle: Font { heading(34, .bold, like: .largeTitle) }
+    static var title: Font { heading(24, .semibold, like: .title2) }
+    static var body: Font { reading(17, .regular, like: .body) }
+    /// The body size, a little heavier, for button labels.
+    static var button: Font { reading(17, .medium, like: .body) }
+    static var caption: Font { reading(13, .regular, like: .caption1) }
+    static var code: Font { .system(size: scaled(16, like: .body), design: .monospaced) }
 }
 
 // MARK: - Spacing
 
-/// Every gap in the app is one of these.
+/// Every gap in the app is one of these six.
 enum Space {
     static let xs: CGFloat = 4
     static let s: CGFloat = 8
@@ -108,11 +101,23 @@ enum Space {
     static let xxl: CGFloat = 32
 }
 
+/// Three corners: small for code and chips, medium for bars and secondary buttons, large for cards.
 enum Radius {
     static let small: CGFloat = 8
-    static let medium: CGFloat = 12
-    static let large: CGFloat = 16
-    static let card: CGFloat = 24
+    static let medium: CGFloat = 16
+    static let large: CGFloat = 24
+}
+
+/// The minimum size of anything you can tap.
+enum Tap {
+    static let minimum: CGFloat = 44
+}
+
+extension View {
+    /// The one shadow in the app.
+    func softShadow() -> some View {
+        shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+    }
 }
 
 // MARK: - Motion
@@ -122,6 +127,8 @@ enum Motion {
     static let press = Animation.spring(response: 0.22, dampingFraction: 0.6)
     /// Panels and cards arriving: a little overshoot, like setting a book down a bit too eagerly.
     static let arrive = Animation.spring(response: 0.55, dampingFraction: 0.68)
+    /// Toggles flipping.
+    static let toggle = Animation.spring(response: 0.3, dampingFraction: 0.7)
     /// Slow, breathing loops for glows and floating.
     static let breathe = Animation.easeInOut(duration: 2.4)
 }

@@ -12,7 +12,7 @@ import UIKit
 // The SpriteKit stage. It never decides anything: it draws the World it's given, and each
 // StepEvent decides how the newest thing arrives.
 //
-// - create glows into being, build assembles piece by piece, spawn pops in, summon streaks down
+// - everything you create glows into being with a flash of sparkles
 // - existing things slide over to make room, so the universe visibly grows
 // - launch lifts off, orbit swings a rocket around a planet, explore lands and drives
 // - move ripples the fabric of space
@@ -128,7 +128,7 @@ final class CosmosScene: SKScene {
         let random = GKMersenneTwisterRandomSource(seed: 2027)
         let bleed: CGFloat = 1.3
 
-        for color in [Palette.nebulaBlue, Palette.ember, Palette.goldTrim] {
+        for color in [Palette.nebulaPurple, Palette.goldTrim, Palette.goldTrim] {
             let nebula = SceneArt.glow(color: color, diameter: max(size.width, size.height) * 0.8, alpha: 0.08)
             nebula.position = CGPoint(x: size.width * CGFloat(random.nextUniform()), y: size.height * CGFloat(random.nextUniform()))
             backdropLayer.addChild(nebula)
@@ -403,7 +403,7 @@ final class CosmosScene: SKScene {
 
     // MARK: - Arrivals
 
-    /// Each way of making something has its own entrance.
+    /// Everything glows into being, with a flash and a few sparkles.
     private func arrive(_ visual: Visual, body: Body, placement: Placement, scale target: CGFloat, duration: TimeInterval) {
         let node = visual.node
         let size = max(placement.size, 24)
@@ -420,61 +420,16 @@ final class CosmosScene: SKScene {
             return
         }
 
-        switch body.verb {
-        case .create:
-            node.alpha = 0
-            node.setScale(target * 0.3)
-            let grow = SKAction.scale(to: target, duration: duration * 0.6)
-            grow.timingMode = .easeOut
-            node.run(.group([.fadeIn(withDuration: duration * 0.6), grow]))
-            let flash = SceneArt.glow(color: Palette.starlight, diameter: size * 2.4, alpha: 0)
-            flash.position = spot
-            flash.run(.sequence([.fadeAlpha(to: 0.8, duration: duration * 0.25), .fadeOut(withDuration: duration * 0.5), .removeFromParent()]))
-            effectLayer.addChild(flash)
-            sparkles(at: spot, size: size)
-
-        case .build:
-            // Piece by piece, from the bottom up, with a little dust and sparks as it goes.
-            let parts = node.children.flatMap { $0.children.isEmpty ? [$0] : $0.children }
-            let lift = size * 0.25 / max(target, 0.01)
-            for (index, part) in parts.enumerated() {
-                let delay = min(duration * 0.6, Double(index) * 0.1)
-                let finalAlpha = part.alpha
-                part.alpha = 0
-                part.position.y -= lift
-                part.run(.sequence([.wait(forDuration: delay), .group([.fadeAlpha(to: finalAlpha, duration: 0.25), .moveBy(x: 0, y: lift, duration: 0.3)])]))
-            }
-            dust(at: CGPoint(x: spot.x, y: spot.y - size * 0.2), size: size)
-            sparkles(at: spot, size: size, colors: [Palette.goldTrim, Palette.ember])
-
-        case .spawn:
-            node.setScale(0.001)
-            let pop = SKAction.scale(to: target * 1.25, duration: 0.18)
-            pop.timingMode = .easeOut
-            node.run(.sequence([pop, .scale(to: target, duration: 0.14)]))
-            ping(at: spot, size: size, color: Palette.nebulaBlue)
-
-        case .summon:
-            // Streaks down from the stars with a glowing tail, and lands with a flash.
-            node.position = CGPoint(x: spot.x + size * 0.4, y: self.size.height + size)
-            let streak = SKSpriteNode(texture: SceneArt.softDot)
-            streak.color = Palette.goldTrim
-            streak.colorBlendFactor = 1
-            streak.blendMode = .add
-            streak.anchorPoint = CGPoint(x: 0.5, y: 0)
-            streak.size = CGSize(width: size * 0.5 / max(target, 0.01), height: size * 4 / max(target, 0.01))
-            streak.position = CGPoint(x: 0, y: 0)
-            streak.alpha = 0.8
-            node.addChild(streak)
-            let fall = SKAction.move(to: spot, duration: duration * 0.45)
-            fall.timingMode = .easeIn
-            node.run(.sequence([fall, .run { [weak self, weak streak] in
-                streak?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
-                self?.ping(at: spot, size: size, color: Palette.goldTrim)
-                self?.sparkles(at: spot, size: size, colors: [Palette.goldTrim, Palette.starlight])
-                self?.shake(amount: size * 0.08)
-            }]))
-        }
+        node.alpha = 0
+        node.setScale(target * 0.3)
+        let grow = SKAction.scale(to: target, duration: duration * 0.6)
+        grow.timingMode = .easeOut
+        node.run(.group([.fadeIn(withDuration: duration * 0.6), grow]))
+        let flash = SceneArt.glow(color: Palette.starlight, diameter: size * 2.4, alpha: 0)
+        flash.position = spot
+        flash.run(.sequence([.fadeAlpha(to: 0.8, duration: duration * 0.25), .fadeOut(withDuration: duration * 0.5), .removeFromParent()]))
+        effectLayer.addChild(flash)
+        sparkles(at: spot, size: size)
 
         if body.thing == .planet, let world {
             let index = world.planets.firstIndex { $0.id == body.id } ?? 0
@@ -498,7 +453,7 @@ final class CosmosScene: SKScene {
     }
 
     private func dust(at point: CGPoint, size: CGFloat) {
-        let puff = SceneArt.burst(colors: [Palette.starlight, Palette.dusk.mixed(with: Palette.starlight, 0.4)],
+        let puff = SceneArt.burst(colors: [Palette.starlight, Palette.midnightBlue.mixed(with: Palette.starlight, 0.4)],
                                   count: style.reduceMotion ? 10 : 36, speed: size * 0.8, lifetime: 1.0, size: size * 0.3)
         puff.position = point
         effectLayer.addChild(puff)
@@ -547,12 +502,20 @@ final class CosmosScene: SKScene {
             reconcile(to: event.world, animated: true, duration: duration * 0.4, claimed: Set(landed + rovers))
             explore(landed: landed, rovers: rovers, world: event.world, duration: duration)
 
-        case .moved(let rockets, _):
-            reconcile(to: event.world, animated: true, duration: duration * 0.8)
+        case .moved(let rockets, let direction):
+            // Turn to face the way it's going (0.2s), then move.
+            let turn = style.reduceMotion ? 0 : 0.2
+            for id in rockets {
+                let face = SKAction.rotate(toAngle: direction.angle, duration: turn, shortestUnitArc: true)
+                face.timingMode = .easeInEaseOut
+                visuals[id]?.node.run(face, withKey: "face")
+            }
+            reconcile(to: event.world, animated: true, duration: duration * 0.8, delayMoves: turn)
             for id in rockets {
                 guard let visual = visuals[id], let rocket = visual.node as? RocketNode else { continue }
                 rocket.boost(for: duration * 0.7)
                 rocket.react(after: duration * 0.7)
+                leaveTrail(behind: rocket, for: duration * 0.8)
                 fabric.ripple(at: rocket.position)
                 run(.sequence([.wait(forDuration: duration * 0.6), .run { [weak self, weak rocket] in
                     if let rocket { self?.fabric.ripple(at: rocket.position, strength: 0.8) }
@@ -571,7 +534,107 @@ final class CosmosScene: SKScene {
         case .easterEgg(let egg):
             playEasterEgg(egg)
         }
+
+        switch event.kind {
+        case .created, .launched, .orbited, .explored, .moved:
+            for rocket in rockets {
+                rocket.wiggle(after: duration * 0.6)
+                popSparks(at: rocket.position, after: duration * 0.6)
+            }
+        default:
+            break
+        }
     }
+
+    /// Drops faint gold dots where the rocket has been, each fading out over a second.
+    private func leaveTrail(behind rocket: RocketNode, for duration: TimeInterval) {
+        guard !style.reduceMotion else { return }
+        let drop = SKAction.run { [weak self, weak rocket] in
+            guard let self, let rocket else { return }
+            let dot = SKShapeNode(circleOfRadius: 2.5)
+            dot.fillColor = Palette.goldTrim.withAlphaComponent(0.3)
+            dot.strokeColor = .clear
+            dot.position = rocket.position
+            dot.run(.sequence([.fadeOut(withDuration: 1), .removeFromParent()]))
+            self.effectLayer.addChild(dot)
+        }
+        run(.repeat(.sequence([drop, .wait(forDuration: 0.05)]), count: max(1, Int(duration / 0.05))))
+    }
+
+    /// Success: three tiny gold sparks hop off the rocket and fade.
+    private func popSparks(at point: CGPoint, after delay: TimeInterval) {
+        guard !style.reduceMotion else { return }
+        for index in 0..<3 {
+            let spark = SKShapeNode(circleOfRadius: 2.5)
+            spark.fillColor = Palette.goldTrim
+            spark.strokeColor = .clear
+            spark.position = point
+            spark.alpha = 0
+            let angle = CGFloat(index) * 2 * .pi / 3 + .pi / 2
+            let fly = SKAction.moveBy(x: cos(angle) * 18, y: sin(angle) * 18, duration: 0.35)
+            fly.timingMode = .easeOut
+            spark.run(.sequence([.wait(forDuration: delay), .fadeIn(withDuration: 0.02),
+                                 .group([fly, .fadeOut(withDuration: 0.35)]), .removeFromParent()]))
+            effectLayer.addChild(spark)
+        }
+    }
+
+    /// The finale, after touchdown: a door opens, a little astronaut steps out onto the Moon,
+    /// walks a few steps, touches the ground, and hops for joy. About three and a half seconds.
+    func playAstronaut() {
+        guard let rocket = rockets.first else { return }
+        let height = rocket.xScale * 100
+        let unit = height * 0.3
+        let ground = CGPoint(x: rocket.position.x + height * 0.22, y: rocket.position.y - height * 0.5)
+
+        let door = SKShapeNode(rectOf: CGSize(width: unit * 0.55, height: unit * 0.8), cornerRadius: unit * 0.12)
+        door.fillColor = Palette.deepSpace
+        door.strokeColor = Palette.starlight.withAlphaComponent(0.6)
+        door.position = CGPoint(x: rocket.position.x, y: rocket.position.y - height * 0.15)
+        door.alpha = 0
+        effectLayer.addChild(door)
+
+        let astronaut = SceneArt.astronaut(size: unit)
+        astronaut.position = CGPoint(x: door.position.x, y: ground.y)
+        astronaut.alpha = 0
+        effectLayer.addChild(astronaut)
+
+        let wait = SKAction.wait(forDuration: 0.8)   // let the landing dust settle
+        guard !style.reduceMotion else {
+            door.run(.sequence([wait, .fadeIn(withDuration: 0.2)]))
+            astronaut.run(.sequence([wait, .move(to: CGPoint(x: ground.x + unit * 1.4, y: ground.y), duration: 0), .fadeIn(withDuration: 0.3)]))
+            return
+        }
+        let step = { (distance: CGFloat) -> SKAction in
+            .group([.moveBy(x: distance, y: 0, duration: 0.25),
+                    .sequence([.moveBy(x: 0, y: unit * 0.15, duration: 0.12), .moveBy(x: 0, y: -unit * 0.15, duration: 0.13)])])
+        }
+        let bend = SKAction.rotate(toAngle: -0.6, duration: 0.25)
+        bend.timingMode = .easeOut
+        let touch = SKAction.run { [weak self] in
+            self?.ping(at: CGPoint(x: astronaut.position.x + unit * 0.4, y: ground.y), size: unit, color: Palette.goldTrim)
+        }
+        let hop = SKAction.sequence([.moveBy(x: 0, y: unit * 0.8, duration: 0.2), .moveBy(x: 0, y: -unit * 0.8, duration: 0.25)])
+        hop.timingMode = .easeOut
+        let cheer = SKAction.run { [weak self] in self?.sparkles(at: astronaut.position, size: unit * 2) }
+
+        door.run(.sequence([wait, .fadeIn(withDuration: 0.25)]))
+        astronaut.run(.sequence([
+            wait, .wait(forDuration: 0.25),
+            .group([.fadeIn(withDuration: 0.2), .moveTo(x: ground.x, duration: 0.3)]),   // steps out
+            step(unit * 0.45), step(unit * 0.45), step(unit * 0.45),                     // walks
+            bend, touch, .wait(forDuration: 0.3), .rotate(toAngle: 0, duration: 0.2),     // touches the surface
+            hop, cheer                                                                    // hops for joy
+        ]))
+    }
+
+    private var rockets: [RocketNode] { visuals.values.compactMap { $0.node as? RocketNode } }
+
+    /// Run was pressed and the code is good: the rocket can barely contain itself.
+    func shiverRockets() { rockets.forEach { $0.shiver() } }
+
+    /// Something new showed up, or a lesson was won.
+    func spinRockets() { rockets.forEach { $0.spin() } }
 
     /// The rocket rises off its pad. Smoke billows and the camera shudders.
     private func lift(rocket id: Int, duration: TimeInterval) {
@@ -658,12 +721,12 @@ final class CosmosScene: SKScene {
             guard let node = visuals[body.id]?.node else { continue }
             let base = node.xScale
             node.run(.sequence([.scale(to: base * 1.18, duration: 0.15), .scale(to: base, duration: 0.25)]))
-            ping(at: node.position, size: layout.placements[body.id]?.size ?? 40, color: condition.negated ? Palette.ember : Palette.nebulaBlue)
+            ping(at: node.position, size: layout.placements[body.id]?.size ?? 40, color: condition.negated ? Palette.goldTrim : Palette.nebulaPurple)
         }
         if existing.isEmpty, let preview {
             showGhosts(of: preview, linger: duration * 0.7)
         } else if existing.isEmpty {
-            ping(at: CGPoint(x: size.width / 2, y: size.height / 2), size: 60, color: condition.negated ? Palette.nebulaBlue : Palette.ember)
+            ping(at: CGPoint(x: size.width / 2, y: size.height / 2), size: 60, color: condition.negated ? Palette.nebulaPurple : Palette.goldTrim)
         }
     }
 
@@ -762,14 +825,9 @@ final class CosmosScene: SKScene {
     // MARK: - Mistakes, surprises, and winning
 
     /// The rocket wobbles and a ring ripples out when code asks for something impossible.
-    private func playConfused() {
-        for case let rocket as RocketNode in visuals.values.map(\.node) {
-            rocket.run(.sequence([
-                .rotate(byAngle: 0.2, duration: 0.08), .rotate(byAngle: -0.4, duration: 0.12),
-                .rotate(byAngle: 0.4, duration: 0.12), .rotate(byAngle: -0.2, duration: 0.08)
-            ]))
-        }
-        ping(at: CGPoint(x: size.width / 2, y: size.height / 2), size: layout.unit * 0.3, color: Palette.ember)
+    func playConfused() {
+        rockets.forEach { $0.tilt() }
+        ping(at: CGPoint(x: size.width / 2, y: size.height / 2), size: layout.unit * 0.3, color: Palette.goldTrim)
         fabric.ripple(at: CGPoint(x: size.width / 2, y: size.height / 2), strength: 0.7)
     }
 
@@ -782,6 +840,8 @@ final class CosmosScene: SKScene {
             rocket?.suitUp()
         case .stargaze:
             drawBigDipper()
+        case .help:
+            rocket?.wiggle()
         }
         let origin = rocket?.position ?? CGPoint(x: size.width / 2, y: size.height / 2)
         sparkles(at: origin, size: 60)
@@ -820,6 +880,7 @@ final class CosmosScene: SKScene {
 
     /// Joins everything you made into a constellation, in the order you made it.
     func celebrate() {
+        spinRockets()
         let ordered = (world?.bodies ?? []).compactMap { body -> CGPoint? in
             guard let visual = visuals[body.id] else { return nil }
             return layout.placements[body.id]?.orbit == nil ? visual.node.position : nil

@@ -7,19 +7,19 @@
 
 import Foundation
 
-// The language of Coding In Orbit is a tiny slice of Swift, and every command makes
-// something happen in the universe. Programs become a tree of statements (an AST) so that
-// repeat and if can hold other statements inside them.
+// RocketScript: the language of Coding In Orbit. It reads like English, so a ten-year-old
+// can guess what it does. Programs become a tree of statements (an AST) so that repeat and
+// if can hold other statements inside them. Indented lines belong to the line above them.
 //
-//     create(launchpad)
-//     spawn(rocket)
-//     launch()
-//     repeat 3 {
-//         create(satellite)
-//     }
-//     if not moon {
-//         summon(moon)
-//     }
+//     create launchpad
+//     create a rocket
+//     launch
+//     repeat 3 times:
+//         create satellite
+//     if not moon:
+//         create moon
+//
+// Parentheses are optional, so Swift-style create(rocket) and launch() work too.
 
 /// Everything that can exist in the universe.
 enum Thing: String, CaseIterable, Sendable, Codable {
@@ -55,22 +55,6 @@ enum Thing: String, CaseIterable, Sendable, Codable {
     }
 }
 
-/// Four ways to say "make this exist". They all work on anything, but each one arrives
-/// differently: build assembles piece by piece, spawn pops in, summon streaks down from
-/// the stars, and create gently glows into being.
-enum Verb: String, CaseIterable, Sendable, Codable {
-    case create, build, spawn, summon
-
-    var pastTense: String {
-        switch self {
-        case .create: "created"
-        case .build: "built"
-        case .spawn: "spawned"
-        case .summon: "summoned"
-        }
-    }
-}
-
 enum Direction: String, CaseIterable, Sendable {
     case up, down, left, right
 
@@ -87,7 +71,7 @@ enum Direction: String, CaseIterable, Sendable {
 
 /// Secret commands. They don't change the universe, they just make something nice happen.
 enum EasterEgg: String, Sendable {
-    case hello, suitUp, stargaze
+    case hello, suitUp, stargaze, help
 }
 
 /// A question the universe can answer: does this thing exist yet? `if not moon` asks the opposite.
@@ -99,10 +83,11 @@ struct Condition: Equatable, Sendable {
 }
 
 indirect enum Statement: Equatable, Sendable {
-    case make(Verb, Thing, line: Int)
+    case make(Thing, line: Int)
     case launch(line: Int)
     case orbit(line: Int)
     case explore(line: Int)
+    case land(line: Int)
     case move(Direction, line: Int)
     case repeatLoop(count: Int, body: [Statement], line: Int)
     case ifElse(Condition, then: [Statement], otherwise: [Statement]?, line: Int)
@@ -110,7 +95,7 @@ indirect enum Statement: Equatable, Sendable {
 
     var line: Int {
         switch self {
-        case .make(_, _, let line), .launch(let line), .orbit(let line), .explore(let line), .move(_, let line),
+        case .make(_, let line), .launch(let line), .orbit(let line), .explore(let line), .land(let line), .move(_, let line),
              .repeatLoop(_, _, let line), .ifElse(_, _, _, let line), .easterEgg(_, let line):
             line
         }
@@ -125,7 +110,7 @@ indirect enum Statement: Equatable, Sendable {
         switch self {
         case .easterEgg:
             0
-        case .make, .launch, .orbit, .explore, .move:
+        case .make, .launch, .orbit, .explore, .land, .move:
             1
         case .repeatLoop(_, let body, _):
             1 + body.commandCount
